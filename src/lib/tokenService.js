@@ -5,10 +5,9 @@ function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function createToken({ name, seva, comment, photoFile }) {
+export async function createTokenFast({ name, seva, comment }) {
   if (!name?.trim()) throw new Error("Name is required");
   if (!seva) throw new Error("Please select seva");
-  if (!photoFile) throw new Error("Photo is required");
 
   const cleanName = name.trim();
 
@@ -41,45 +40,21 @@ export async function createToken({ name, seva, comment, photoFile }) {
   const currentTokenNo = settingData?.value?.currentTokenNo || 0;
   const nextTokenNo = currentTokenNo + 1;
 
-  let compressedPhoto;
-
-  try {
-    compressedPhoto = await compressImage(photoFile);
-  } catch (error) {
-    throw new Error("Photo compression failed: " + error.message);
-  }
-
-  const fileName = `${Date.now()}-token-${nextTokenNo}.jpg`;
-  const photoPath = `tokens/${fileName}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("token-photos")
-    .upload(photoPath, compressedPhoto, {
-      contentType: "image/jpeg",
-      upsert: false,
-    });
-
-  if (uploadError) {
-    throw new Error("Photo upload failed: " + uploadError.message);
-  }
-
-  const { data: publicUrlData } = supabase.storage
-    .from("token-photos")
-    .getPublicUrl(photoPath);
-
-  const photoUrl = publicUrlData.publicUrl;
-
-  const { error: insertError } = await supabase.from("tokens").insert({
-    token_no: nextTokenNo,
-    name: cleanName,
-    name_lower: cleanName.toLowerCase(),
-    seva,
-    comment: comment?.trim() || "",
-    photo_url: photoUrl,
-    photo_path: photoPath,
-    status: "Assigned",
-    created_date: getTodayDate(),
-  });
+  const { data: insertedToken, error: insertError } = await supabase
+    .from("tokens")
+    .insert({
+      token_no: nextTokenNo,
+      name: cleanName,
+      name_lower: cleanName.toLowerCase(),
+      seva,
+      comment: comment?.trim() || "",
+      photo_url: "",
+      photo_path: "",
+      status: "Assigned",
+      created_date: getTodayDate(),
+    })
+    .select("*")
+    .single();
 
   if (insertError) {
     throw new Error("Token save failed: " + insertError.message);
@@ -97,15 +72,57 @@ export async function createToken({ name, seva, comment, photoFile }) {
     throw new Error("Counter update failed: " + updateError.message);
   }
 
-  return {
-    tokenNo: nextTokenNo,
-    name: cleanName,
-    seva,
-    comment: comment?.trim() || "",
-    photoUrl,
-    status: "Assigned",
-    createdAt: new Date().toISOString(),
-  };
+  return mapToken(insertedToken);
+}
+
+export async function uploadPhotoForToken({ tokenId, tokenNo, photoFile }) {
+  if (!tokenId || !photoFile) return null;
+
+  try {
+    const compressedPhoto = await compressImage(photoFile);
+
+    const fileName = `${Date.now()}-token-${tokenNo}.jpg`;
+    const photoPath = `tokens/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("token-photos")
+      .upload(photoPath, compressedPhoto, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Photo upload failed:", uploadError.message);
+      return null;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from("token-photos")
+      .getPublicUrl(photoPath);
+
+    const photoUrl = publicUrlData.publicUrl;
+
+    const { data, error: updateError } = await supabase
+      .from("tokens")
+      .update({
+        photo_url: photoUrl,
+        photo_path: photoPath,
+        status: "Assigned",
+      })
+      .eq("id", tokenId)
+      .select("*")
+      .single();
+
+    if (updateError) {
+      console.error("Photo update failed:", updateError.message);
+      return null;
+    }
+
+    return mapToken(data);
+  } catch (error) {
+    console.error("Background photo upload failed:", error.message);
+    return null;
+  }
 }
 
 export async function searchTokens({ searchText, seva }) {
@@ -146,15 +163,20 @@ export async function getTodayTokens() {
 }
 
 export async function resetTokenCounter() {
-  const { error } = await supabase
-    .from("settings")
-    .update({
+  const { error } = await supabase.from("settings").upsert(
+    {
+      key: "tokenCounter",
       value: { currentTokenNo: 0 },
       updated_at: new Date().toISOString(),
-    })
-    .eq("key", "tokenCounter");
+    },
+    {
+      onConflict: "key",
+    }
+  );
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error("Counter reset failed: " + error.message);
+  }
 }
 
 function mapToken(item) {

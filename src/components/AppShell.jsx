@@ -6,23 +6,29 @@ export default function AppShell({ children, title, subtitle }) {
     <AuthGate>
       <main className="min-h-screen bg-[#f5efe6] text-[#2f241d]">
         <div className="mx-auto min-h-screen max-w-md px-4 pb-8 pt-4">
-          <header className="mb-4 rounded-[28px] border border-[#eadfce] bg-[#fffaf3] px-5 py-5 shadow-[0_12px_35px_rgba(90,64,43,0.08)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h1 className="text-[28px] font-black tracking-tight text-[#2f241d]">
-                  {title}
-                </h1>
-
-                {subtitle && (
-                  <p className="mt-2 text-sm leading-6 text-[#715b48]">
-                    {subtitle}
+          <header className="mb-4 overflow-hidden rounded-[32px] border border-[#eadfce] bg-[#fffaf3] shadow-[0_18px_45px_rgba(90,64,43,0.10)]">
+            <div className="bg-gradient-to-br from-[#8a5d3c] to-[#5f3b27] px-5 py-5 text-white">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-white/65">
+                    Seva Management
                   </p>
-                )}
+
+                  <h1 className="mt-2 text-[30px] font-black leading-tight tracking-tight">
+                    {title}
+                  </h1>
+                </div>
+
+                <div className="flex h-13 w-13 items-center justify-center rounded-2xl border border-white/20 bg-white/12 px-3 py-3 text-sm font-black shadow-inner">
+                  सेवा
+                </div>
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#eadfce] bg-[#f7eadb] text-sm font-black text-[#7b4f32]">
-                सेवा
-              </div>
+              {subtitle && (
+                <p className="mt-3 text-sm leading-6 text-white/78">
+                  {subtitle}
+                </p>
+              )}
             </div>
           </header>
 

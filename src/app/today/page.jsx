@@ -18,7 +18,7 @@ export default function TodayPage() {
       const data = await getTodayTokens();
       setTokens(data);
     } catch (err) {
-      setError(err.message || "Unable to load today's tokens");
+      setError(err.message || "Unable to load today tokens");
     } finally {
       setLoading(false);
     }
@@ -29,24 +29,22 @@ export default function TodayPage() {
   }, []);
 
   return (
-    <AppShell
-      title="Today’s Tokens"
-      subtitle="View all seva tokens created today."
-    >
-      <div className="mb-4 rounded-[28px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_12px_35px_rgba(90,64,43,0.08)]">
+    <AppShell title="Today’s Tokens" subtitle="All tokens created today.">
+      <div className="mb-4 rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#a88a6d]">
-              Total Tokens
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
+              Total Today
             </p>
-            <h2 className="mt-1 text-4xl font-black text-[#2f241d]">
+
+            <h2 className="mt-1 text-5xl font-black text-[#2f241d]">
               {tokens.length}
             </h2>
           </div>
 
           <button
             onClick={loadTokens}
-            className="rounded-2xl bg-[#7b4f32] px-5 py-3 text-sm font-black text-white shadow-md"
+            className="rounded-2xl bg-[#7b4f32] px-5 py-3 text-sm font-black text-white shadow-[0_10px_24px_rgba(123,79,50,0.22)]"
           >
             Refresh
           </button>
@@ -54,8 +52,8 @@ export default function TodayPage() {
       </div>
 
       {loading && (
-        <div className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] p-4 text-center font-bold text-[#7b4f32]">
-          Loading tokens...
+        <div className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] p-5 text-center text-sm font-black text-[#7b4f32]">
+          Loading today’s tokens...
         </div>
       )}
 
@@ -66,8 +64,11 @@ export default function TodayPage() {
       )}
 
       {!loading && tokens.length === 0 && !error && (
-        <div className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] p-5 text-center text-sm font-bold text-[#715b48]">
-          No tokens generated today.
+        <div className="rounded-[28px] border border-[#eadfce] bg-[#fffaf3] p-6 text-center shadow-sm">
+          <p className="text-lg font-black text-[#2f241d]">No tokens yet</p>
+          <p className="mt-2 text-sm font-semibold text-[#715b48]">
+            Today’s generated tokens will appear here.
+          </p>
         </div>
       )}
 

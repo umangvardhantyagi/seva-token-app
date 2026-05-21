@@ -31,7 +31,7 @@ export default function CheckPage() {
       setTokens(results);
 
       if (results.length === 0) {
-        setError("No token found");
+        setError("No token found. Please check token number or name.");
       }
     } catch (err) {
       setError(err.message || "Search failed");
@@ -41,14 +41,23 @@ export default function CheckPage() {
   }
 
   return (
-    <AppShell
-      title="Check Token"
-      subtitle="Verify assigned person using token number, name or seva."
-    >
+    <AppShell title="Check Token" subtitle="Verify assigned seva person quickly.">
       <form
         onSubmit={handleSearch}
-        className="space-y-4 rounded-[30px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_12px_35px_rgba(90,64,43,0.08)]"
+        className="space-y-5 rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]"
       >
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
+            Token Search
+          </p>
+          <h2 className="mt-2 text-2xl font-black text-[#2f241d]">
+            Find assigned person
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-[#715b48]">
+            Enter token number or name. Seva filter is optional.
+          </p>
+        </div>
+
         <div>
           <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
             Token Number or Name
@@ -57,7 +66,7 @@ export default function CheckPage() {
           <input
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            placeholder="Example: 1 or Ravi"
+            placeholder="Example: 1 or Mohan"
             className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold text-[#2f241d] shadow-sm outline-none transition focus:border-[#8a5d3c] focus:bg-white"
           />
         </div>

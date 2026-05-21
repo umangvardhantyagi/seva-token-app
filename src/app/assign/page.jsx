@@ -6,7 +6,7 @@ import LoadingButton from "@/components/LoadingButton";
 import PhotoUpload from "@/components/PhotoUpload";
 import SevaSelector from "@/components/SevaSelector";
 import TokenCard from "@/components/TokenCard";
-import { createToken } from "@/lib/tokenService";
+import { createTokenFast, uploadPhotoForToken } from "@/lib/tokenService";
 
 export default function AssignPage() {
   const [name, setName] = useState("");
@@ -17,7 +17,6 @@ export default function AssignPage() {
   const [loading, setLoading] = useState(false);
   const [generatedToken, setGeneratedToken] = useState(null);
   const [error, setError] = useState("");
-  const [progress, setProgress] = useState("");
   const [resetKey, setResetKey] = useState(0);
 
   async function handleSubmit(e) {
@@ -25,7 +24,6 @@ export default function AssignPage() {
 
     setError("");
     setGeneratedToken(null);
-    setProgress("");
 
     if (!seva) {
       setError("Please select seva");
@@ -38,47 +36,69 @@ export default function AssignPage() {
     }
 
     if (!photoFile) {
-      setError("Please take or upload photo");
+      setError("Please take or choose photo");
       return;
     }
 
     setLoading(true);
 
     try {
-      setProgress("Compressing photo and creating token...");
+      const savedPhotoFile = photoFile;
 
-      const result = await createToken({
+      const token = await createTokenFast({
         name,
         seva,
         comment,
-        photoFile,
       });
 
-      setGeneratedToken(result);
-      setProgress(`Token ${result.tokenNo} generated successfully`);
+      setGeneratedToken(token);
 
       setName("");
       setSeva("");
       setComment("");
       setPhotoFile(null);
       setResetKey((prev) => prev + 1);
+      setLoading(false);
+
+      // Background photo upload.
+      // No message is shown to the user. Token number is already created.
+      setTimeout(async () => {
+        const updatedToken = await uploadPhotoForToken({
+          tokenId: token.id,
+          tokenNo: token.tokenNo,
+          photoFile: savedPhotoFile,
+        });
+
+        if (updatedToken) {
+          setGeneratedToken(updatedToken);
+        }
+      }, 100);
     } catch (err) {
       setError(err.message || "Something went wrong");
-      setProgress("");
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <AppShell
-      title="Assign Token"
-      subtitle="Create a new seva token with name, photo and seva details."
-    >
+    <AppShell title="Assign Token">
       <form
         onSubmit={handleSubmit}
-        className="space-y-4 rounded-[30px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_12px_35px_rgba(90,64,43,0.08)]"
+        className="space-y-5 rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]"
       >
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
+            New Token
+          </p>
+
+          <h2 className="mt-2 text-2xl font-black text-[#2f241d]">
+            Enter seva details
+          </h2>
+
+          <p className="mt-1 text-sm leading-6 text-[#715b48]">
+            Fill details and generate token number instantly.
+          </p>
+        </div>
+
         <SevaSelector value={seva} onChange={setSeva} />
 
         <div>
@@ -110,12 +130,6 @@ export default function AssignPage() {
           />
         </div>
 
-        {progress && (
-          <div className="rounded-2xl border border-green-100 bg-green-50 p-4 text-sm font-black text-green-700">
-            {progress}
-          </div>
-        )}
-
         {error && (
           <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700">
             {error}
@@ -129,16 +143,16 @@ export default function AssignPage() {
 
       {generatedToken && (
         <div className="mt-5 space-y-3">
-          <div className="rounded-[28px] border border-green-100 bg-green-50 p-5 text-center text-green-800">
-            <p className="text-sm font-black uppercase tracking-[0.18em]">
+          <div className="rounded-[30px] border border-green-100 bg-green-50 p-6 text-center text-green-800 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-[0.22em]">
               Token Generated
             </p>
 
-            <h2 className="mt-2 text-5xl font-black">
+            <h2 className="mt-2 text-6xl font-black leading-none">
               {generatedToken.tokenNo}
             </h2>
 
-            <p className="mt-2 text-sm font-bold">
+            <p className="mt-3 text-sm font-bold">
               Please note this token number.
             </p>
           </div>
