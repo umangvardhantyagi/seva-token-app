@@ -101,10 +101,6 @@ export default function LoginPage() {
             <h1 className="mt-2 text-4xl font-black tracking-tight text-[#2f241d]">
               Seva Token App
             </h1>
-
-            <p className="mt-2 text-sm font-semibold text-[#715b48]">
-              Login with your assigned ID and password.
-            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4 p-5 pt-6">
@@ -112,6 +108,7 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
                 Login ID
               </label>
+
               <input
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
@@ -124,6 +121,7 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
                 Password
               </label>
+
               <input
                 type="password"
                 inputMode="numeric"
@@ -163,6 +161,7 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
                 Admin Password
               </label>
+
               <input
                 type="password"
                 inputMode="numeric"

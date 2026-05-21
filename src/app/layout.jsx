@@ -2,8 +2,15 @@ import "./globals.css";
 
 export const metadata = {
   title: "Seva Token App",
-  description: "Simple seva token management app",
+  description: "Seva token management app",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/app-icon.jpg",
+    apple: "/app-icon.jpg",
+  },
+};
+
+export const viewport = {
   themeColor: "#7b4f32",
 };
 
