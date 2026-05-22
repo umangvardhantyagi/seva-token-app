@@ -3,9 +3,15 @@
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import TokenCard from "@/components/TokenCard";
-import { getTodayTokens } from "@/lib/tokenService";
+import { getLocalSession } from "@/lib/authService";
+import {
+  deleteSingleToken,
+  getTodayTokens,
+  updateTokenDetails,
+} from "@/lib/tokenService";
 
 export default function TodayPage() {
+  const [session, setSession] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -25,8 +31,32 @@ export default function TodayPage() {
   }
 
   useEffect(() => {
+    setSession(getLocalSession());
     loadTokens();
   }, []);
+
+  async function handleEdit(token, updates) {
+    const updatedToken = await updateTokenDetails({
+      tokenId: token.id,
+      ...updates,
+    });
+
+    setTokens((prev) =>
+      prev.map((item) => (item.id === updatedToken.id ? updatedToken : item))
+    );
+  }
+
+  async function handleDelete(token) {
+    const confirmDelete = window.confirm(
+      `Delete token ${token.tokenNo}? This cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    await deleteSingleToken(token);
+
+    setTokens((prev) => prev.filter((item) => item.id !== token.id));
+  }
 
   return (
     <AppShell title="Today’s Tokens" subtitle="All tokens created today.">
@@ -74,7 +104,13 @@ export default function TodayPage() {
 
       <div className="space-y-4">
         {tokens.map((token) => (
-          <TokenCard key={token.id} token={token} />
+          <TokenCard
+            key={token.id}
+            token={token}
+            currentUser={session}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         ))}
       </div>
     </AppShell>

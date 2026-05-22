@@ -13,6 +13,7 @@ import {
   getUsers,
   setAccessMode,
   toggleUserStatus,
+  verifyAdminPassword,
 } from "@/lib/authService";
 
 export default function AdminPage() {
@@ -128,16 +129,27 @@ export default function AdminPage() {
   }
 
   async function handleCleanupOneDay() {
-    const confirmCleanup = window.confirm(
-      "Delete records and photos older than 1 day?"
+    const adminPassword = window.prompt(
+      "Enter admin password to delete records older than 1 day:"
     );
 
-    if (!confirmCleanup) return;
+    if (!adminPassword) return;
 
     setLoadingCleanup1Day(true);
     setMessage("");
 
     try {
+      await verifyAdminPassword(adminPassword);
+
+      const confirmCleanup = window.confirm(
+        "Password verified. Delete records and photos older than 1 day?"
+      );
+
+      if (!confirmCleanup) {
+        setLoadingCleanup1Day(false);
+        return;
+      }
+
       const deletedCount = await cleanupOldData(1);
       setMessage(
         `Cleanup completed. Deleted ${deletedCount} record(s) older than 1 day.`
@@ -246,46 +258,28 @@ export default function AdminPage() {
             </p>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
-              Name
-            </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
+          />
 
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Example: Mohan"
-              className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none transition focus:border-[#8a5d3c] focus:bg-white"
-            />
-          </div>
+          <input
+            value={loginId}
+            onChange={(e) => setLoginId(e.target.value)}
+            placeholder="Login ID"
+            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
+          />
 
-          <div>
-            <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
-              Login ID
-            </label>
-
-            <input
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              placeholder="Example: mohan"
-              className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none transition focus:border-[#8a5d3c] focus:bg-white"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-black text-[#4c3a2f]">
-              Password
-            </label>
-
-            <input
-              type="password"
-              inputMode="numeric"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Example: 1234"
-              className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none transition focus:border-[#8a5d3c] focus:bg-white"
-            />
-          </div>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
+          />
 
           <LoadingButton loading={loadingUser} loadingText="Saving user...">
             Save User
@@ -359,8 +353,7 @@ export default function AdminPage() {
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-[#715b48]">
-            Use this when storage needs to be cleared early. Normal 3-day
-            cleanup will be handled automatically later.
+            Admin password is required before deleting old data.
           </p>
 
           <div className="mt-4">

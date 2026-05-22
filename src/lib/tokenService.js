@@ -5,7 +5,7 @@ function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function createTokenFast({ name, seva, comment }) {
+export async function createTokenFast({ name, seva, comment, createdBy }) {
   if (!name?.trim()) throw new Error("Name is required");
   if (!seva) throw new Error("Please select seva");
 
@@ -52,6 +52,9 @@ export async function createTokenFast({ name, seva, comment }) {
       photo_path: "",
       status: "Assigned",
       created_date: getTodayDate(),
+      created_by_login_id: createdBy?.loginId || "",
+      created_by_name: createdBy?.name || "",
+      updated_at: new Date().toISOString(),
     })
     .select("*")
     .single();
@@ -108,6 +111,7 @@ export async function uploadPhotoForToken({ tokenId, tokenNo, photoFile }) {
         photo_url: photoUrl,
         photo_path: photoPath,
         status: "Assigned",
+        updated_at: new Date().toISOString(),
       })
       .eq("id", tokenId)
       .select("*")
@@ -162,6 +166,45 @@ export async function getTodayTokens() {
   return (data || []).map(mapToken);
 }
 
+export async function updateTokenDetails({ tokenId, name, seva, comment }) {
+  if (!tokenId) throw new Error("Token ID missing");
+  if (!name?.trim()) throw new Error("Name is required");
+  if (!seva) throw new Error("Please select seva");
+
+  const cleanName = name.trim();
+
+  const { data, error } = await supabase
+    .from("tokens")
+    .update({
+      name: cleanName,
+      name_lower: cleanName.toLowerCase(),
+      seva,
+      comment: comment?.trim() || "",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", tokenId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error("Token update failed: " + error.message);
+
+  return mapToken(data);
+}
+
+export async function deleteSingleToken(token) {
+  if (!token?.id) throw new Error("Token ID missing");
+
+  if (token.photoPath) {
+    await supabase.storage.from("token-photos").remove([token.photoPath]);
+  }
+
+  const { error } = await supabase.from("tokens").delete().eq("id", token.id);
+
+  if (error) throw new Error("Token delete failed: " + error.message);
+
+  return true;
+}
+
 export async function resetTokenCounter() {
   const { error } = await supabase.from("settings").upsert(
     {
@@ -191,5 +234,8 @@ function mapToken(item) {
     status: item.status,
     createdDate: item.created_date,
     createdAt: item.created_at,
+    updatedAt: item.updated_at,
+    createdByLoginId: item.created_by_login_id,
+    createdByName: item.created_by_name,
   };
 }

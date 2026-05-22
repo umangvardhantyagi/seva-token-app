@@ -1,19 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import LoadingButton from "@/components/LoadingButton";
 import SevaSelector from "@/components/SevaSelector";
 import TokenCard from "@/components/TokenCard";
-import { searchTokens } from "@/lib/tokenService";
+import { getLocalSession } from "@/lib/authService";
+import {
+  deleteSingleToken,
+  searchTokens,
+  updateTokenDetails,
+} from "@/lib/tokenService";
 
 export default function CheckPage() {
+  const [session, setSession] = useState(null);
+
   const [searchText, setSearchText] = useState("");
   const [seva, setSeva] = useState("");
   const [tokens, setTokens] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setSession(getLocalSession());
+  }, []);
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -38,6 +49,29 @@ export default function CheckPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleEdit(token, updates) {
+    const updatedToken = await updateTokenDetails({
+      tokenId: token.id,
+      ...updates,
+    });
+
+    setTokens((prev) =>
+      prev.map((item) => (item.id === updatedToken.id ? updatedToken : item))
+    );
+  }
+
+  async function handleDelete(token) {
+    const confirmDelete = window.confirm(
+      `Delete token ${token.tokenNo}? This cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    await deleteSingleToken(token);
+
+    setTokens((prev) => prev.filter((item) => item.id !== token.id));
   }
 
   return (
@@ -86,7 +120,13 @@ export default function CheckPage() {
 
       <div className="mt-5 space-y-4">
         {tokens.map((token) => (
-          <TokenCard key={token.id} token={token} />
+          <TokenCard
+            key={token.id}
+            token={token}
+            currentUser={session}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         ))}
       </div>
     </AppShell>

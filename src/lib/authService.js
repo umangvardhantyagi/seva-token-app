@@ -147,6 +147,32 @@ export async function loginUser({ loginId, password }) {
   return sessionUser;
 }
 
+export async function verifyUserPassword(loginId, password) {
+  if (!loginId?.trim()) throw new Error("Login ID is required");
+  if (!password?.trim()) throw new Error("Password is required");
+
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("login_id", loginId.trim().toLowerCase())
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!user) throw new Error("User not found");
+
+  const enteredHash = await hashPassword(password.trim());
+
+  if (enteredHash !== user.password_hash) {
+    throw new Error("Wrong password");
+  }
+
+  return true;
+}
+
+export async function verifyAdminPassword(password) {
+  return verifyUserPassword("admin", password);
+}
+
 export async function getUsers() {
   const { data, error } = await supabase
     .from("users")

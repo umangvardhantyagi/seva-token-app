@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import LoadingButton from "@/components/LoadingButton";
 import PhotoUpload from "@/components/PhotoUpload";
 import SevaSelector from "@/components/SevaSelector";
 import TokenCard from "@/components/TokenCard";
+import { getLocalSession } from "@/lib/authService";
 import { createTokenFast, uploadPhotoForToken } from "@/lib/tokenService";
 
 export default function AssignPage() {
+  const [session, setSession] = useState(null);
+
   const [name, setName] = useState("");
   const [seva, setSeva] = useState("");
   const [comment, setComment] = useState("");
@@ -18,6 +21,10 @@ export default function AssignPage() {
   const [generatedToken, setGeneratedToken] = useState(null);
   const [error, setError] = useState("");
   const [resetKey, setResetKey] = useState(0);
+
+  useEffect(() => {
+    setSession(getLocalSession());
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,6 +56,10 @@ export default function AssignPage() {
         name,
         seva,
         comment,
+        createdBy: {
+          loginId: session?.loginId || "",
+          name: session?.name || "",
+        },
       });
 
       setGeneratedToken(token);
@@ -60,8 +71,6 @@ export default function AssignPage() {
       setResetKey((prev) => prev + 1);
       setLoading(false);
 
-      // Background photo upload.
-      // No message is shown to the user. Token number is already created.
       setTimeout(async () => {
         const updatedToken = await uploadPhotoForToken({
           tokenId: token.id,
@@ -157,7 +166,7 @@ export default function AssignPage() {
             </p>
           </div>
 
-          <TokenCard token={generatedToken} />
+          <TokenCard token={generatedToken} currentUser={session} />
         </div>
       )}
     </AppShell>
