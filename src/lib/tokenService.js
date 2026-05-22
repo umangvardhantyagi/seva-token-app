@@ -2,7 +2,39 @@ import { supabase } from "./supabase";
 import { compressImage } from "./compressImage";
 
 function getTodayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const indiaDate = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  return indiaDate.toISOString().slice(0, 10);
+}
+
+async function getNextAvailableTokenNo() {
+  const todayDate = getTodayDate();
+
+  const { data, error } = await supabase
+    .from("tokens")
+    .select("token_no")
+    .eq("created_date", todayDate)
+    .order("token_no", { ascending: true });
+
+  if (error) {
+    throw new Error("Unable to read today's tokens: " + error.message);
+  }
+
+  const usedNumbers = new Set();
+
+  (data || []).forEach((item) => {
+    if (item.token_no) {
+      usedNumbers.add(Number(item.token_no));
+    }
+  });
+
+  let tokenNo = 1;
+
+  while (usedNumbers.has(tokenNo)) {
+    tokenNo++;
+  }
+
+  return tokenNo;
 }
 
 export async function createTokenFast({ name, seva, comment, createdBy }) {
@@ -11,26 +43,7 @@ export async function createTokenFast({ name, seva, comment, createdBy }) {
 
   const cleanName = name.trim();
   const todayDate = getTodayDate();
-
-  // Find smallest available token number for today.
-  // Example: if 1 is deleted, next token will again become 1.
-  const { data: todayTokens, error: tokenFetchError } = await supabase
-    .from("tokens")
-    .select("token_no")
-    .eq("created_date", todayDate)
-    .order("token_no", { ascending: true });
-
-  if (tokenFetchError) {
-    throw new Error("Unable to read today's tokens: " + tokenFetchError.message);
-  }
-
-  const usedNumbers = new Set((todayTokens || []).map((item) => item.token_no));
-
-  let nextTokenNo = 1;
-
-  while (usedNumbers.has(nextTokenNo)) {
-    nextTokenNo++;
-  }
+  const nextTokenNo = await getNextAvailableTokenNo();
 
   const { data: insertedToken, error: insertError } = await supabase
     .from("tokens")
@@ -55,8 +68,6 @@ export async function createTokenFast({ name, seva, comment, createdBy }) {
     throw new Error("Token save failed: " + insertError.message);
   }
 
-  // Keep counter updated for admin visibility/reset support,
-  // but token number is now decided by smallest available number.
   await supabase.from("settings").upsert(
     {
       key: "tokenCounter",
@@ -138,8 +149,9 @@ export async function searchTokens({ searchText, seva }) {
   }
 
   const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .limit(30);
+    .order("created_date", { ascending: false })
+    .order("token_no", { ascending: true })
+    .limit(100);
 
   if (error) throw new Error("Search failed: " + error.message);
 
@@ -188,12 +200,23 @@ export async function deleteSingleToken(token) {
   if (!token?.id) throw new Error("Token ID missing");
 
   if (token.photoPath) {
-    await supabase.storage.from("token-photos").remove([token.photoPath]);
+    const { error: photoError } = await supabase.storage
+      .from("token-photos")
+      .remove([token.photoPath]);
+
+    if (photoError) {
+      console.error("Photo delete failed:", photoError.message);
+    }
   }
 
-  const { error } = await supabase.from("tokens").delete().eq("id", token.id);
+  const { error } = await supabase
+    .from("tokens")
+    .delete()
+    .eq("id", token.id);
 
-  if (error) throw new Error("Token delete failed: " + error.message);
+  if (error) {
+    throw new Error("Token delete failed: " + error.message);
+  }
 
   return true;
 }
