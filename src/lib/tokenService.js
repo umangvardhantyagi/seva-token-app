@@ -10,35 +10,27 @@ export async function createTokenFast({ name, seva, comment, createdBy }) {
   if (!seva) throw new Error("Please select seva");
 
   const cleanName = name.trim();
+  const todayDate = getTodayDate();
 
-  let { data: settingData, error: settingError } = await supabase
-    .from("settings")
-    .select("value")
-    .eq("key", "tokenCounter")
-    .maybeSingle();
+  // Find smallest available token number for today.
+  // Example: if 1 is deleted, next token will again become 1.
+  const { data: todayTokens, error: tokenFetchError } = await supabase
+    .from("tokens")
+    .select("token_no")
+    .eq("created_date", todayDate)
+    .order("token_no", { ascending: true });
 
-  if (settingError) {
-    throw new Error("Unable to read token counter: " + settingError.message);
+  if (tokenFetchError) {
+    throw new Error("Unable to read today's tokens: " + tokenFetchError.message);
   }
 
-  if (!settingData) {
-    const { error: createCounterError } = await supabase.from("settings").insert({
-      key: "tokenCounter",
-      value: { currentTokenNo: 0 },
-      updated_at: new Date().toISOString(),
-    });
+  const usedNumbers = new Set((todayTokens || []).map((item) => item.token_no));
 
-    if (createCounterError) {
-      throw new Error(
-        "Unable to create token counter: " + createCounterError.message
-      );
-    }
+  let nextTokenNo = 1;
 
-    settingData = { value: { currentTokenNo: 0 } };
+  while (usedNumbers.has(nextTokenNo)) {
+    nextTokenNo++;
   }
-
-  const currentTokenNo = settingData?.value?.currentTokenNo || 0;
-  const nextTokenNo = currentTokenNo + 1;
 
   const { data: insertedToken, error: insertError } = await supabase
     .from("tokens")
@@ -51,7 +43,7 @@ export async function createTokenFast({ name, seva, comment, createdBy }) {
       photo_url: "",
       photo_path: "",
       status: "Assigned",
-      created_date: getTodayDate(),
+      created_date: todayDate,
       created_by_login_id: createdBy?.loginId || "",
       created_by_name: createdBy?.name || "",
       updated_at: new Date().toISOString(),
@@ -63,17 +55,18 @@ export async function createTokenFast({ name, seva, comment, createdBy }) {
     throw new Error("Token save failed: " + insertError.message);
   }
 
-  const { error: updateError } = await supabase
-    .from("settings")
-    .update({
+  // Keep counter updated for admin visibility/reset support,
+  // but token number is now decided by smallest available number.
+  await supabase.from("settings").upsert(
+    {
+      key: "tokenCounter",
       value: { currentTokenNo: nextTokenNo },
       updated_at: new Date().toISOString(),
-    })
-    .eq("key", "tokenCounter");
-
-  if (updateError) {
-    throw new Error("Counter update failed: " + updateError.message);
-  }
+    },
+    {
+      onConflict: "key",
+    }
+  );
 
   return mapToken(insertedToken);
 }
@@ -158,8 +151,8 @@ export async function getTodayTokens() {
     .from("tokens")
     .select("*")
     .eq("created_date", getTodayDate())
-    .order("created_at", { ascending: false })
-    .limit(300);
+    .order("token_no", { ascending: true })
+    .limit(500);
 
   if (error) throw new Error("Today tokens failed: " + error.message);
 
