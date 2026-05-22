@@ -18,7 +18,6 @@ export default function PhotoUpload({ onChange, resetKey }) {
     setPreview(previewUrl);
     onChange(file);
 
-    // Allows selecting the same photo again if needed
     e.target.value = "";
   }
 
@@ -28,27 +27,39 @@ export default function PhotoUpload({ onChange, resetKey }) {
         Person Photo
       </label>
 
-      <div className="rounded-[26px] border border-[#eadfce] bg-[#fffaf3] p-3 shadow-sm">
+      <div className="overflow-hidden rounded-[30px] border border-[#e4d1bd] bg-gradient-to-br from-[#fffaf3] via-[#f8efe5] to-[#efe0cf] p-3 shadow-[0_14px_35px_rgba(77,50,31,0.10)]">
         {preview ? (
-          <img
-            src={preview}
-            alt="Selected person"
-            className="h-60 w-full rounded-[22px] object-cover"
-          />
+          <div className="relative overflow-hidden rounded-[26px]">
+            <img
+              src={preview}
+              alt="Selected person"
+              className="h-64 w-full object-cover"
+            />
+
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent p-4">
+              <p className="text-sm font-black text-white">Photo selected</p>
+            </div>
+          </div>
         ) : (
-          <div className="rounded-[22px] border border-dashed border-[#d5bea6] bg-[#f8f0e7] px-5 py-8 text-center">
-            <div className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-[#d5bea6] bg-[#fffaf3]" />
-            <p className="text-base font-black text-[#4c3a2f]">
-              No photo selected
+          <div className="rounded-[26px] border border-[#deccb8] bg-[#f7ecdf] px-5 py-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-[#d5bda4] bg-[#fffaf3] shadow-[0_10px_25px_rgba(77,50,31,0.08)]">
+              <span className="text-xs font-black uppercase tracking-[0.18em] text-[#8a5d3c]">
+                Photo
+              </span>
+            </div>
+
+            <p className="text-lg font-black text-[#2f241d]">
+              Add Person Photo
             </p>
-            <p className="mt-2 text-sm leading-6 text-[#715b48]">
-              Take a new photo or choose from gallery.
+
+            <p className="mx-auto mt-2 max-w-[260px] text-sm font-semibold leading-6 text-[#715b48]">
+              Take a fresh photo or choose one from gallery.
             </p>
           </div>
         )}
 
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <label className="cursor-pointer rounded-2xl bg-[#7b4f32] px-4 py-4 text-center text-sm font-black text-white shadow-md active:scale-[0.99]">
+          <label className="cursor-pointer rounded-2xl bg-gradient-to-br from-[#8a5d3c] to-[#633b27] px-4 py-4 text-center text-sm font-black text-white shadow-[0_10px_25px_rgba(123,79,50,0.22)] active:scale-[0.99]">
             Take Photo
             <input
               type="file"
@@ -59,8 +70,8 @@ export default function PhotoUpload({ onChange, resetKey }) {
             />
           </label>
 
-          <label className="cursor-pointer rounded-2xl border border-[#d7c3ac] bg-[#f8f0e7] px-4 py-4 text-center text-sm font-black text-[#7b4f32] active:scale-[0.99]">
-            Gallery
+          <label className="cursor-pointer rounded-2xl border border-[#d7c3ac] bg-[#fffaf3] px-4 py-4 text-center text-sm font-black text-[#7b4f32] shadow-sm active:scale-[0.99]">
+            Choose Photo
             <input
               type="file"
               accept="image/*"

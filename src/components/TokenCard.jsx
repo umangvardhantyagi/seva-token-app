@@ -3,12 +3,7 @@
 import { useState } from "react";
 import { sevaOptions } from "@/constants/sevaOptions";
 
-export default function TokenCard({
-  token,
-  currentUser,
-  onEdit,
-  onDelete,
-}) {
+export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(token.name || "");
   const [editSeva, setEditSeva] = useState(token.seva || "");
@@ -16,7 +11,8 @@ export default function TokenCard({
   const [saving, setSaving] = useState(false);
 
   const isAdmin = currentUser?.loginId === "admin";
-  const isOwner = currentUser?.loginId && currentUser.loginId === token.createdByLoginId;
+  const isOwner =
+    currentUser?.loginId && currentUser.loginId === token.createdByLoginId;
   const canManage = Boolean(isAdmin || isOwner);
 
   const time = token.createdAt
@@ -45,7 +41,7 @@ export default function TokenCard({
   }
 
   return (
-    <article className="overflow-hidden rounded-[30px] border border-[#eadfce] bg-[#fffaf3] shadow-[0_12px_35px_rgba(90,64,43,0.08)]">
+    <article className="overflow-hidden rounded-[32px] border border-[#e6d5c3] bg-[#fffaf3] shadow-[0_16px_42px_rgba(77,50,31,0.10)]">
       {token.photoUrl && (
         <img
           src={token.photoUrl}
@@ -58,11 +54,11 @@ export default function TokenCard({
       <div className="space-y-3 p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#a88a6d]">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#a88a6d]">
               Token Number
             </p>
 
-            <h2 className="mt-1 text-4xl font-black text-[#2f241d]">
+            <h2 className="mt-1 text-5xl font-black leading-none text-[#2f241d]">
               {token.tokenNo}
             </h2>
           </div>
@@ -135,30 +131,16 @@ export default function TokenCard({
           </div>
         ) : (
           <>
-            <div className="rounded-2xl bg-[#f8f0e7] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#a88a6d]">
-                Name
-              </p>
-              <p className="mt-1 text-xl font-black text-[#2f241d]">
-                {token.name}
-              </p>
-            </div>
+            <InfoBox label="Name" value={token.name} large />
 
-            <div className="rounded-2xl bg-[#f8f0e7] p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#a88a6d]">
-                Assigned Seva
-              </p>
-              <p className="mt-1 text-base font-black text-[#7b4f32]">
-                {token.seva}
-              </p>
-            </div>
+            <InfoBox label="Assigned Seva" value={token.seva} highlight />
 
             {token.comment && (
               <div className="rounded-2xl bg-[#f8f0e7] p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#a88a6d]">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a88a6d]">
                   Comment
                 </p>
-                <p className="mt-1 text-sm leading-6 text-[#715b48]">
+                <p className="mt-1 text-sm font-semibold leading-6 text-[#715b48]">
                   {token.comment}
                 </p>
               </div>
@@ -166,14 +148,11 @@ export default function TokenCard({
           </>
         )}
 
-        <div className="rounded-2xl border border-[#eadfce] bg-white/60 p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#a88a6d]">
-            Created By
-          </p>
-          <p className="mt-1 text-sm font-black text-[#7b4f32]">
-            {token.createdByName || token.createdByLoginId || "Not available"}
-          </p>
-        </div>
+        <InfoBox
+          label="Created By"
+          value={token.createdByName || token.createdByLoginId || "Not available"}
+          highlight
+        />
 
         {time && (
           <p className="pt-1 text-xs font-bold text-[#a88a6d]">
@@ -202,5 +181,26 @@ export default function TokenCard({
         )}
       </div>
     </article>
+  );
+}
+
+function InfoBox({ label, value, large, highlight }) {
+  return (
+    <div className="rounded-2xl bg-[#f8f0e7] p-4">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a88a6d]">
+        {label}
+      </p>
+      <p
+        className={`mt-1 font-black ${
+          large
+            ? "text-xl text-[#2f241d]"
+            : highlight
+            ? "text-base text-[#7b4f32]"
+            : "text-sm text-[#715b48]"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
