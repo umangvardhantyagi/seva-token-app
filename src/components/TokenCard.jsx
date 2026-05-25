@@ -13,6 +13,7 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
   const isAdmin = currentUser?.loginId === "admin";
   const isOwner =
     currentUser?.loginId && currentUser.loginId === token.createdByLoginId;
+
   const canManage = Boolean(isAdmin || isOwner);
 
   const time = token.createdAt
@@ -25,6 +26,16 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
   async function handleSave() {
     if (!onEdit) return;
 
+    if (!editName.trim()) {
+      alert("Name is required");
+      return;
+    }
+
+    if (!editSeva) {
+      alert("Please select seva");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -35,6 +46,8 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
       });
 
       setEditing(false);
+    } catch (error) {
+      alert(error.message);
     } finally {
       setSaving(false);
     }
@@ -74,10 +87,11 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
               <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-[#a88a6d]">
                 Name
               </label>
+
               <input
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm font-bold outline-none"
+                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm font-bold text-[#2f241d] outline-none"
               />
             </div>
 
@@ -85,10 +99,11 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
               <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-[#a88a6d]">
                 Seva
               </label>
+
               <select
                 value={editSeva}
                 onChange={(e) => setEditSeva(e.target.value)}
-                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm font-bold outline-none"
+                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm font-bold text-[#2f241d] outline-none"
               >
                 {sevaOptions.map((item) => (
                   <option key={item} value={item}>
@@ -102,11 +117,12 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
               <label className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-[#a88a6d]">
                 Comment
               </label>
+
               <textarea
                 value={editComment}
                 onChange={(e) => setEditComment(e.target.value)}
                 rows={3}
-                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm outline-none"
+                className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-3 text-sm text-[#2f241d] outline-none"
               />
             </div>
 
@@ -115,15 +131,16 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
                 type="button"
                 disabled={saving}
                 onClick={handleSave}
-                className="rounded-xl bg-[#7b4f32] px-3 py-3 text-sm font-black text-white"
+                className="rounded-xl bg-[#7b4f32] px-3 py-3 text-sm font-black text-white disabled:opacity-60"
               >
                 {saving ? "Saving..." : "Save"}
               </button>
 
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => setEditing(false)}
-                className="rounded-xl bg-white px-3 py-3 text-sm font-black text-[#7b4f32]"
+                className="rounded-xl bg-white px-3 py-3 text-sm font-black text-[#7b4f32] disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -140,6 +157,7 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a88a6d]">
                   Comment
                 </p>
+
                 <p className="mt-1 text-sm font-semibold leading-6 text-[#715b48]">
                   {token.comment}
                 </p>
@@ -190,6 +208,7 @@ function InfoBox({ label, value, large, highlight }) {
       <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a88a6d]">
         {label}
       </p>
+
       <p
         className={`mt-1 font-black ${
           large

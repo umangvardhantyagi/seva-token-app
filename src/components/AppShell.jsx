@@ -1,10 +1,13 @@
 import AuthGate from "./AuthGate";
 import BottomNav from "./BottomNav";
+import NotificationPopup from "./NotificationPopup";
 
 export default function AppShell({ children, title, subtitle }) {
   return (
     <AuthGate>
       <main className="min-h-screen bg-[#f4eadf] text-[#2f241d]">
+        <NotificationPopup />
+
         <div className="mx-auto min-h-screen max-w-md px-4 pb-8 pt-4">
           <header className="mb-4 overflow-hidden rounded-[34px] border border-[#e7d5c1] bg-[#fffaf3] shadow-[0_18px_45px_rgba(77,50,31,0.10)]">
             <div className="bg-gradient-to-br from-[#8b5e3c] via-[#74462d] to-[#4f2f20] px-5 py-6 text-white">
