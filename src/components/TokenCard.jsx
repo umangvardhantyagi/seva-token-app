@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { sevaOptions } from "@/constants/sevaOptions";
+import TokenResponses from "./TokenResponses";
 
 export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
   const [editing, setEditing] = useState(false);
@@ -177,6 +178,8 @@ export default function TokenCard({ token, currentUser, onEdit, onDelete }) {
             Created at {time}
           </p>
         )}
+
+        <TokenResponses token={token} />
 
         {canManage && !editing && (
           <div className="grid grid-cols-2 gap-2 pt-2">

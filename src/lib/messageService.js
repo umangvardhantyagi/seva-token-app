@@ -226,6 +226,64 @@ export async function respondToNotification({ notificationId, responseMessage })
   }
 }
 
+export async function getTokenResponses(tokenId) {
+  if (!tokenId) return [];
+
+  const { data, error } = await supabase
+    .from("token_message_users")
+    .select(
+      `
+      id,
+      token_id,
+      message_id,
+      tagged_user_login_id,
+      tagged_user_name,
+      tagged_by_login_id,
+      tagged_by_name,
+      response_message,
+      responded_at,
+      created_at,
+      token_messages (
+        id,
+        message,
+        created_by_name,
+        created_by_login_id,
+        created_at
+      )
+    `
+    )
+    .eq("token_id", tokenId)
+    .not("response_message", "is", null)
+    .neq("response_message", "")
+    .order("responded_at", { ascending: true });
+
+  if (error) {
+    throw new Error("Unable to load token responses: " + error.message);
+  }
+
+  return (data || []).map((item) => ({
+    id: item.id,
+    tokenId: item.token_id,
+    messageId: item.message_id,
+
+    taggedUserLoginId: item.tagged_user_login_id,
+    taggedUserName: item.tagged_user_name,
+
+    taggedByLoginId: item.tagged_by_login_id,
+    taggedByName: item.tagged_by_name,
+
+    originalMessage: item.token_messages?.message || "",
+    originalMessageBy:
+      item.token_messages?.created_by_name ||
+      item.token_messages?.created_by_login_id ||
+      "",
+
+    responseMessage: item.response_message || "",
+    respondedAt: item.responded_at,
+    createdAt: item.created_at,
+  }));
+}
+
 export async function cleanupOldTokenCommunication() {
   const { error } = await supabase.rpc("cleanup_old_token_communication");
 
