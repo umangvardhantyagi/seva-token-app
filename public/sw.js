@@ -1,10 +1,11 @@
-const CACHE_NAME = "sadhak-directory-v2";
+const CACHE_NAME = "sadhak-directory-v5";
 
 const STATIC_ASSETS = [
   "/",
   "/login",
   "/manifest.json",
   "/app-icon.jpg",
+  "/app-icon.png",
   "/icon-192.png",
   "/icon-512.png",
   "/apple-touch-icon.png",
