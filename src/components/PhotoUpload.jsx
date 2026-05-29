@@ -27,7 +27,7 @@ export default function PhotoUpload({ onChange, resetKey }) {
         Person Photo
       </label>
 
-      <div className="overflow-hidden rounded-[30px] border border-[#e4d1bd] bg-gradient-to-br from-[#fffaf3] via-[#f8efe5] to-[#efe0cf] p-3 shadow-[0_14px_35px_rgba(77,50,31,0.10)]">
+      <div className="overflow-hidden rounded-[30px] border border-[#e4d1bd] bg-gradient-to-br from-[#ffffff] via-[#f8efe5] to-[#efe0cf] p-3 shadow-[0_14px_35px_rgba(77,50,31,0.10)]">
         {preview ? (
           <div className="relative overflow-hidden rounded-[26px]">
             <img
@@ -42,7 +42,7 @@ export default function PhotoUpload({ onChange, resetKey }) {
           </div>
         ) : (
           <div className="rounded-[26px] border border-[#deccb8] bg-[#f7ecdf] px-5 py-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-[#d5bda4] bg-[#fffaf3] shadow-[0_10px_25px_rgba(77,50,31,0.08)]">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border border-[#d5bda4] bg-[#ffffff] shadow-[0_10px_25px_rgba(77,50,31,0.08)]">
               <span className="text-xs font-black uppercase tracking-[0.18em] text-[#8a5d3c]">
                 Photo
               </span>
@@ -70,7 +70,7 @@ export default function PhotoUpload({ onChange, resetKey }) {
             />
           </label>
 
-          <label className="cursor-pointer rounded-2xl border border-[#d7c3ac] bg-[#fffaf3] px-4 py-4 text-center text-sm font-black text-[#7b4f32] shadow-sm active:scale-[0.99]">
+          <label className="cursor-pointer rounded-2xl border border-[#d7c3ac] bg-[#ffffff] px-4 py-4 text-center text-sm font-black text-[#7b4f32] shadow-sm active:scale-[0.99]">
             Choose Photo
             <input
               type="file"

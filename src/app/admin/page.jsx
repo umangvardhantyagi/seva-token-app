@@ -1,400 +1,923 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import LoadingButton from "@/components/LoadingButton";
-import { cleanupOldData } from "@/lib/cleanupOldData";
-import { resetTokenCounter } from "@/lib/tokenService";
 import {
-  createOrUpdateUser,
+  createUser,
   deleteUser,
-  getAccessMode,
   getLocalSession,
   getUsers,
-  setAccessMode,
-  toggleUserStatus,
-  verifyAdminPassword,
+  updateUser,
 } from "@/lib/authService";
+import {
+  createAccessArea,
+  deleteAccessArea,
+  getAccessAreas,
+  getSadhaks,
+  getSevas,
+  updateAccessArea,
+} from "@/lib/directoryService";
+import {
+  getTeamLeaderSevaRows,
+  isAdminUser,
+  setTeamLeaderSevas,
+} from "@/lib/permissionService";
+
+const roleOptions = [
+  { value: "admin", label: "Admin" },
+  { value: "team_leader", label: "Team Leader" },
+  { value: "view_only", label: "View Only" },
+];
 
 export default function AdminPage() {
-  const [session, setSession] = useState(null);
-
-  const [loadingCleanup1Day, setLoadingCleanup1Day] = useState(false);
-  const [loadingReset, setLoadingReset] = useState(false);
-  const [loadingUser, setLoadingUser] = useState(false);
-  const [loadingMode, setLoadingMode] = useState(false);
-
-  const [message, setMessage] = useState("");
-  const [accessMode, setAccessModeState] = useState("open");
-
-  const [name, setName] = useState("");
-  const [loginId, setLoginId] = useState("");
-  const [password, setPassword] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("users");
 
   const [users, setUsers] = useState([]);
+  const [sadhaks, setSadhaks] = useState([]);
+  const [sevas, setSevas] = useState([]);
+  const [accessAreas, setAccessAreas] = useState([]);
+  const [teamLeaderRows, setTeamLeaderRows] = useState([]);
 
-  const isAdmin = session?.loginId === "admin";
+  const [loading, setLoading] = useState(true);
 
-  async function loadAdminData() {
-    try {
-      const mode = await getAccessMode();
-      const userList = await getUsers();
+  const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
-      setAccessModeState(mode);
-      setUsers(userList);
-    } catch (error) {
-      setMessage(error.message || "Unable to load admin data");
-    }
-  }
+  const [userName, setUserName] = useState("");
+  const [loginId, setLoginId] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("view_only");
+  const [userActive, setUserActive] = useState(true);
+  const [linkedSadhakId, setLinkedSadhakId] = useState("");
+  const [sadhakSearch, setSadhakSearch] = useState("");
+
+  const [showAccessForm, setShowAccessForm] = useState(false);
+  const [editingAccessArea, setEditingAccessArea] = useState(null);
+  const [accessName, setAccessName] = useState("");
+  const [accessDescription, setAccessDescription] = useState("");
+  const [accessActive, setAccessActive] = useState(true);
+
+  const [selectedTeamLeaderLoginId, setSelectedTeamLeaderLoginId] = useState("");
+  const [selectedSevaIds, setSelectedSevaIds] = useState([]);
+  const [sevaSearch, setSevaSearch] = useState("");
+
+  const [saving, setSaving] = useState(false);
+
+  const isAdmin = isAdminUser(currentUser);
+
+  const teamLeaders = useMemo(() => {
+    return users.filter((user) => user.role === "team_leader" && user.active);
+  }, [users]);
+
+  const filteredSadhaks = useMemo(() => {
+    const text = sadhakSearch.trim().toLowerCase();
+
+    if (!text) return sadhaks.slice(0, 80);
+
+    return sadhaks
+      .filter((sadhak) => {
+        return (
+          sadhak.nameLower?.includes(text) ||
+          sadhak.sadhakCode?.toLowerCase().includes(text) ||
+          sadhak.mobile?.includes(text)
+        );
+      })
+      .slice(0, 80);
+  }, [sadhaks, sadhakSearch]);
+
+  const filteredSevas = useMemo(() => {
+    const text = sevaSearch.trim().toLowerCase();
+
+    if (!text) return sevas;
+
+    return sevas.filter((seva) => seva.nameLower.includes(text));
+  }, [sevas, sevaSearch]);
+
+  const selectedTeamLeader = useMemo(() => {
+    return users.find((user) => user.loginId === selectedTeamLeaderLoginId);
+  }, [users, selectedTeamLeaderLoginId]);
+
+  const selectedTeamLeaderSevas = useMemo(() => {
+    return sevas.filter((seva) => selectedSevaIds.includes(seva.id));
+  }, [sevas, selectedSevaIds]);
 
   useEffect(() => {
-    const localSession = getLocalSession();
-    setSession(localSession);
+    const session = getLocalSession();
+    setCurrentUser(session);
 
-    if (localSession?.loginId === "admin") {
+    if (isAdminUser(session)) {
       loadAdminData();
+    } else {
+      setLoading(false);
     }
   }, []);
 
-  async function handleAccessModeChange(mode) {
-    setLoadingMode(true);
-    setMessage("");
+  async function loadAdminData() {
+    setLoading(true);
 
     try {
-      await setAccessMode(mode);
-      setAccessModeState(mode);
-      setMessage(
-        `Access mode changed to ${
-          mode === "open" ? "Open Link" : "Login Required"
-        }.`
-      );
+      const [userData, sadhakData, sevaData, accessData, assignmentData] =
+        await Promise.all([
+          getUsers(),
+          getSadhaks({ searchText: "", sevaId: "", activeOnly: false }),
+          getSevas({ searchText: "" }),
+          getAccessAreas({ searchText: "" }),
+          getTeamLeaderSevaRows(),
+        ]);
+
+      setUsers(userData);
+      setSadhaks(sadhakData);
+      setSevas(sevaData);
+      setAccessAreas(accessData);
+      setTeamLeaderRows(assignmentData);
     } catch (error) {
-      setMessage(error.message || "Unable to change access mode");
+      alert(error.message);
     } finally {
-      setLoadingMode(false);
+      setLoading(false);
     }
   }
 
-  async function handleCreateUser(e) {
+  function openAddUserForm() {
+    setEditingUser(null);
+    setUserName("");
+    setLoginId("");
+    setPassword("");
+    setRole("view_only");
+    setUserActive(true);
+    setLinkedSadhakId("");
+    setSadhakSearch("");
+    setShowUserForm(true);
+  }
+
+  function openEditUserForm(user) {
+    setEditingUser(user);
+    setUserName(user.name || "");
+    setLoginId(user.loginId || "");
+    setPassword("");
+    setRole(user.role || "view_only");
+    setUserActive(Boolean(user.active));
+    setLinkedSadhakId(user.linkedSadhakId || "");
+    setSadhakSearch("");
+    setShowUserForm(true);
+  }
+
+  async function handleUserSubmit(e) {
     e.preventDefault();
 
-    setLoadingUser(true);
-    setMessage("");
+    if (!userName.trim()) {
+      alert("Please enter name");
+      return;
+    }
+
+    if (!loginId.trim()) {
+      alert("Please enter login ID");
+      return;
+    }
+
+    if (!editingUser && !password.trim()) {
+      alert("Please enter password");
+      return;
+    }
+
+    if (role === "team_leader" && !linkedSadhakId) {
+      alert("Please link Team Leader with a Sadhak profile first");
+      return;
+    }
+
+    setSaving(true);
 
     try {
-      await createOrUpdateUser({
-        name,
-        loginId,
-        password,
-        active: true,
-      });
+      if (editingUser) {
+        await updateUser({
+          loginId: editingUser.loginId,
+          name: userName,
+          role,
+          active: userActive,
+          password,
+          linkedSadhakId,
+        });
+      } else {
+        await createUser({
+          name: userName,
+          loginId,
+          password,
+          role,
+          linkedSadhakId,
+        });
+      }
 
-      setName("");
+      setShowUserForm(false);
+      setEditingUser(null);
+      setUserName("");
       setLoginId("");
       setPassword("");
-      setMessage("User account saved successfully.");
+      setRole("view_only");
+      setUserActive(true);
+      setLinkedSadhakId("");
+      setSadhakSearch("");
+
       await loadAdminData();
     } catch (error) {
-      setMessage(error.message || "Unable to save user");
+      alert(error.message);
     } finally {
-      setLoadingUser(false);
-    }
-  }
-
-  async function handleToggleUser(user) {
-    setMessage("");
-
-    try {
-      await toggleUserStatus(user.loginId, !user.active);
-      await loadAdminData();
-    } catch (error) {
-      setMessage(error.message || "Unable to update user");
+      setSaving(false);
     }
   }
 
   async function handleDeleteUser(user) {
-    const confirmDelete = window.confirm(`Delete ${user.name}?`);
+    const ok = window.confirm(`Delete user "${user.name}"?`);
 
-    if (!confirmDelete) return;
-
-    setMessage("");
+    if (!ok) return;
 
     try {
       await deleteUser(user.loginId);
       await loadAdminData();
-      setMessage("User deleted successfully.");
     } catch (error) {
-      setMessage(error.message || "Unable to delete user");
+      alert(error.message);
     }
   }
 
-  async function handleCleanupOneDay() {
-    const adminPassword = window.prompt(
-      "Enter admin password to delete records older than 1 day:"
-    );
+  function openAddAccessForm() {
+    setEditingAccessArea(null);
+    setAccessName("");
+    setAccessDescription("");
+    setAccessActive(true);
+    setShowAccessForm(true);
+  }
 
-    if (!adminPassword) return;
+  function openEditAccessForm(area) {
+    setEditingAccessArea(area);
+    setAccessName(area.name || "");
+    setAccessDescription(area.description || "");
+    setAccessActive(Boolean(area.active));
+    setShowAccessForm(true);
+  }
 
-    setLoadingCleanup1Day(true);
-    setMessage("");
+  async function handleAccessSubmit(e) {
+    e.preventDefault();
+
+    if (!accessName.trim()) {
+      alert("Please enter access area name");
+      return;
+    }
+
+    setSaving(true);
 
     try {
-      await verifyAdminPassword(adminPassword);
-
-      const confirmCleanup = window.confirm(
-        "Password verified. Delete records and photos older than 1 day?"
-      );
-
-      if (!confirmCleanup) {
-        setLoadingCleanup1Day(false);
-        return;
+      if (editingAccessArea) {
+        await updateAccessArea({
+          accessAreaId: editingAccessArea.id,
+          name: accessName,
+          description: accessDescription,
+          active: accessActive,
+        });
+      } else {
+        await createAccessArea({
+          name: accessName,
+          description: accessDescription,
+        });
       }
 
-      const deletedCount = await cleanupOldData(1);
-      setMessage(
-        `Cleanup completed. Deleted ${deletedCount} record(s) older than 1 day.`
-      );
+      setShowAccessForm(false);
+      setEditingAccessArea(null);
+      setAccessName("");
+      setAccessDescription("");
+      setAccessActive(true);
+
+      await loadAdminData();
     } catch (error) {
-      setMessage(error.message || "Cleanup failed");
+      alert(error.message);
     } finally {
-      setLoadingCleanup1Day(false);
+      setSaving(false);
     }
   }
 
-  async function handleResetCounter() {
-    const confirmReset = window.confirm(
-      "Are you sure? New token number will start again from 1."
-    );
+  async function handleDeleteAccessArea(area) {
+    const ok = window.confirm(`Delete access area "${area.name}"?`);
 
-    if (!confirmReset) return;
-
-    setLoadingReset(true);
-    setMessage("");
+    if (!ok) return;
 
     try {
-      await resetTokenCounter();
-      setMessage("Token counter reset successfully. Next token will be 1.");
+      await deleteAccessArea(area.id);
+      await loadAdminData();
     } catch (error) {
-      setMessage(error.message || "Counter reset failed");
+      alert(error.message);
+    }
+  }
+
+  function handleTeamLeaderChange(loginId) {
+    setSelectedTeamLeaderLoginId(loginId);
+
+    const assignedSevaIds = teamLeaderRows
+      .filter((row) => row.team_leader_login_id === loginId)
+      .map((row) => row.seva_id);
+
+    setSelectedSevaIds(assignedSevaIds);
+  }
+
+  function toggleLeaderSeva(sevaId) {
+    setSelectedSevaIds((prev) => {
+      if (prev.includes(sevaId)) {
+        return prev.filter((id) => id !== sevaId);
+      }
+
+      return [...prev, sevaId];
+    });
+  }
+
+  async function handleSaveLeaderSevas() {
+    if (!selectedTeamLeaderLoginId) {
+      alert("Please select team leader");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await setTeamLeaderSevas(selectedTeamLeaderLoginId, selectedSevaIds);
+      alert("Team leader seva assignment saved");
+      await loadAdminData();
+    } catch (error) {
+      alert(error.message);
     } finally {
-      setLoadingReset(false);
+      setSaving(false);
     }
   }
 
   if (!isAdmin) {
     return (
-      <AppShell title="Admin" subtitle="Only admin can access this page.">
-        <div className="rounded-[30px] border border-orange-100 bg-orange-50 p-5 text-sm font-bold text-orange-700">
-          Admin access required. Please login with admin account.
+      <AppShell title="Admin" subtitle="Restricted Access">
+        <div className="rounded-[28px] border border-[#d9e0ee] bg-white p-5 text-sm font-black text-red-700 shadow-sm">
+          You do not have admin access.
         </div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell
-      title="Admin"
-      subtitle="Manage users, access and cleanup settings."
-    >
-      <div className="space-y-5">
-        <div className="rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
-            Access Control
+    <AppShell title="Admin" subtitle="Control Panel">
+      <div className="space-y-4">
+        <section className="rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2563eb]">
+            Settings
           </p>
 
-          <h2 className="mt-2 text-2xl font-black text-[#2f241d]">
-            {accessMode === "open" ? "Open Link Access" : "Login Required"}
+          <h2 className="mt-1 text-2xl font-black text-[#172033]">
+            Admin Panel
           </h2>
 
-          <p className="mt-2 text-sm leading-6 text-[#715b48]">
-            Choose whether everyone with the link can use the app, or only
-            created users can login.
-          </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-[#eef3fb] p-2">
+            <TabButton
+              label="Users"
+              active={activeTab === "users"}
+              onClick={() => setActiveTab("users")}
+            />
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={loadingMode}
-              onClick={() => handleAccessModeChange("open")}
-              className={`rounded-2xl px-4 py-4 text-sm font-black ${
-                accessMode === "open"
-                  ? "bg-[#7b4f32] text-white shadow-[0_10px_24px_rgba(123,79,50,0.22)]"
-                  : "bg-[#f8f0e7] text-[#7b4f32]"
-              }`}
-            >
-              Open Link
-            </button>
+            <TabButton
+              label="Leaders"
+              active={activeTab === "leaders"}
+              onClick={() => setActiveTab("leaders")}
+            />
 
-            <button
-              type="button"
-              disabled={loadingMode}
-              onClick={() => handleAccessModeChange("login")}
-              className={`rounded-2xl px-4 py-4 text-sm font-black ${
-                accessMode === "login"
-                  ? "bg-[#7b4f32] text-white shadow-[0_10px_24px_rgba(123,79,50,0.22)]"
-                  : "bg-[#f8f0e7] text-[#7b4f32]"
-              }`}
-            >
-              Login Required
-            </button>
+            <TabButton
+              label="Access"
+              active={activeTab === "access"}
+              onClick={() => setActiveTab("access")}
+            />
           </div>
-        </div>
+        </section>
 
-        <form
-          onSubmit={handleCreateUser}
-          className="space-y-4 rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]"
-        >
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
-              User Account
-            </p>
+        {activeTab === "users" && (
+          <>
+            <section className="rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2563eb]">
+                    Accounts
+                  </p>
 
-            <h2 className="mt-2 text-2xl font-black text-[#2f241d]">
-              Create / Reset User
-            </h2>
+                  <h2 className="mt-1 text-xl font-black text-[#172033]">
+                    User Accounts
+                  </h2>
+                </div>
 
-            <p className="mt-1 text-sm leading-6 text-[#715b48]">
-              Enter the same Login ID with a new password to reset password.
-            </p>
-          </div>
+                <button
+                  type="button"
+                  onClick={openAddUserForm}
+                  className="rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white"
+                >
+                  Add User
+                </button>
+              </div>
+            </section>
 
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Name"
-            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
-          />
-
-          <input
-            value={loginId}
-            onChange={(e) => setLoginId(e.target.value)}
-            placeholder="Login ID"
-            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
-          />
-
-          <input
-            type="password"
-            inputMode="numeric"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold outline-none"
-          />
-
-          <LoadingButton loading={loadingUser} loadingText="Saving user...">
-            Save User
-          </LoadingButton>
-        </form>
-
-        <div className="rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
-            Active Users
-          </p>
-
-          <div className="mt-4 space-y-3">
-            {users.map((user) => (
-              <div
-                key={user.loginId}
-                className="rounded-2xl border border-[#eadfce] bg-[#f8f0e7] p-4"
+            {showUserForm && (
+              <form
+                onSubmit={handleUserSubmit}
+                className="space-y-4 rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-black text-[#2f241d]">
-                      {user.name}
-                    </p>
+                <h3 className="text-xl font-black text-[#172033]">
+                  {editingUser ? "Edit User" : "Create User"}
+                </h3>
 
-                    <p className="text-sm font-bold text-[#7b4f32]">
-                      {user.loginId}
-                    </p>
+                <Input label="Name" value={userName} onChange={setUserName} />
 
-                    <p className="mt-1 text-xs font-bold text-[#8a7461]">
-                      {user.active ? "Active" : "Disabled"}
-                    </p>
+                <Input
+                  label="Login ID"
+                  value={loginId}
+                  onChange={setLoginId}
+                  disabled={Boolean(editingUser)}
+                />
+
+                <Input
+                  label={`Password ${editingUser ? "Optional" : ""}`}
+                  value={password}
+                  onChange={setPassword}
+                  type="password"
+                  placeholder={
+                    editingUser ? "Leave blank to keep old password" : ""
+                  }
+                />
+
+                <div>
+                  <label className="mb-2 block text-sm font-black text-[#172033]">
+                    Role
+                  </label>
+
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none"
+                  >
+                    {roleOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-[26px] border border-[#d9e0ee] bg-[#f8fafc] p-4">
+                  <label className="mb-2 block text-sm font-black text-[#172033]">
+                    Linked Sadhak Profile{" "}
+                    {role === "team_leader" && (
+                      <span className="text-red-600">*</span>
+                    )}
+                  </label>
+
+                  <input
+                    value={sadhakSearch}
+                    onChange={(e) => setSadhakSearch(e.target.value)}
+                    placeholder="Search sadhak by ID, name or mobile"
+                    className="mb-3 w-full rounded-2xl border border-[#d9e0ee] bg-white px-4 py-3 text-sm font-bold text-[#172033] outline-none"
+                  />
+
+                  {linkedSadhakId && (
+                    <div className="mb-3 rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white">
+                      Selected:{" "}
+                      {sadhaks.find((item) => item.id === linkedSadhakId)
+                        ?.name || "Sadhak"}
+                    </div>
+                  )}
+
+                  <div className="max-h-72 overflow-y-auto rounded-2xl bg-white p-2">
+                    {filteredSadhaks.map((sadhak) => (
+                      <button
+                        key={sadhak.id}
+                        type="button"
+                        onClick={() => setLinkedSadhakId(sadhak.id)}
+                        className={`mb-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left ${
+                          linkedSadhakId === sadhak.id
+                            ? "bg-[#102a56] text-white"
+                            : "bg-[#f8fafc] text-[#172033]"
+                        }`}
+                      >
+                        <div className="h-10 w-10 overflow-hidden rounded-xl bg-[#eef3fb]">
+                          {sadhak.photoUrl ? (
+                            <img
+                              src={sadhak.photoUrl}
+                              alt={sadhak.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : null}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black">
+                            {sadhak.name}
+                          </p>
+                          <p className="text-xs font-bold opacity-75">
+                            {sadhak.sadhakCode} • {sadhak.mobile}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUser(user)}
-                      className="block rounded-xl bg-white px-3 py-2 text-xs font-black text-[#7b4f32]"
-                    >
-                      {user.active ? "Disable" : "Enable"}
-                    </button>
+                {editingUser && (
+                  <label className="flex items-center gap-3 rounded-2xl bg-[#f8fafc] p-4 text-sm font-black text-[#172033]">
+                    <input
+                      type="checkbox"
+                      checked={userActive}
+                      onChange={(e) => setUserActive(e.target.checked)}
+                    />
+                    Active Account
+                  </label>
+                )}
 
-                    {user.loginId !== "admin" && (
+                <FormButtons
+                  saving={saving}
+                  onCancel={() => setShowUserForm(false)}
+                />
+              </form>
+            )}
+
+            <section className="space-y-3">
+              {loading ? (
+                <LoadingCard text="Loading users..." />
+              ) : users.length === 0 ? (
+                <LoadingCard text="No users found." />
+              ) : (
+                users.map((user) => (
+                  <div
+                    key={user.loginId}
+                    className="rounded-[26px] border border-[#d9e0ee] bg-white p-5 shadow-[0_12px_30px_rgba(16,42,86,0.07)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-black text-[#172033]">
+                          {user.name}
+                        </h3>
+
+                        <p className="mt-1 text-xs font-bold text-[#697386]">
+                          {user.loginId}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`rounded-full px-3 py-2 text-[11px] font-black ${
+                          user.active
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {user.active ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+
+                    <Info label="Role" value={formatRole(user.role)} />
+
+                    {user.linkedSadhak && (
+                      <Info
+                        label="Linked Sadhak"
+                        value={`${user.linkedSadhak.name} (${user.linkedSadhak.sadhakCode})`}
+                      />
+                    )}
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditUserForm(user)}
+                        className="rounded-2xl border border-[#d9e0ee] bg-[#eef3fb] px-4 py-3 text-sm font-black text-[#102a56]"
+                      >
+                        Edit
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleDeleteUser(user)}
-                        className="block rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-700"
+                        disabled={user.loginId === "admin"}
+                        className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-700 disabled:opacity-50"
                       >
                         Delete
                       </button>
-                    )}
+                    </div>
                   </div>
+                ))
+              )}
+            </section>
+          </>
+        )}
+
+        {activeTab === "leaders" && (
+          <section className="space-y-4">
+            <div className="rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2563eb]">
+                Team Leaders
+              </p>
+
+              <h2 className="mt-1 text-xl font-black text-[#172033]">
+                Assign Seva Responsibility
+              </h2>
+
+              <select
+                value={selectedTeamLeaderLoginId}
+                onChange={(e) => handleTeamLeaderChange(e.target.value)}
+                className="mt-4 w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none"
+              >
+                <option value="">Select Team Leader</option>
+
+                {teamLeaders.map((leader) => (
+                  <option key={leader.loginId} value={leader.loginId}>
+                    {leader.name}
+                    {leader.linkedSadhak
+                      ? ` - ${leader.linkedSadhak.sadhakCode}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+
+              {selectedTeamLeader && (
+                <div className="mt-4 rounded-2xl bg-[#eef3fb] p-4">
+                  <p className="text-sm font-black text-[#102a56]">
+                    {selectedTeamLeader.name}
+                  </p>
+
+                  {selectedTeamLeader.linkedSadhak && (
+                    <p className="mt-1 text-xs font-bold text-[#697386]">
+                      Linked: {selectedTeamLeader.linkedSadhak.name} (
+                      {selectedTeamLeader.linkedSadhak.sadhakCode})
+                    </p>
+                  )}
                 </div>
-              </div>
-            ))}
+              )}
 
-            {users.length === 0 && (
-              <div className="rounded-2xl bg-[#f8f0e7] p-4 text-sm font-bold text-[#715b48]">
-                No users found.
+              <input
+                value={sevaSearch}
+                onChange={(e) => setSevaSearch(e.target.value)}
+                placeholder="Search seva"
+                className="mt-4 w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none"
+              />
+
+              <div className="mt-4 max-h-96 overflow-y-auto rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] p-2">
+                {filteredSevas.map((seva) => {
+                  const selected = selectedSevaIds.includes(seva.id);
+
+                  return (
+                    <button
+                      key={seva.id}
+                      type="button"
+                      onClick={() => toggleLeaderSeva(seva.id)}
+                      className={`mb-2 flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black ${
+                        selected
+                          ? "bg-[#102a56] text-white"
+                          : "bg-white text-[#172033]"
+                      }`}
+                    >
+                      <span>{seva.name}</span>
+                      <span>{selected ? "✓" : "+"}</span>
+                    </button>
+                  );
+                })}
               </div>
+
+              {selectedTeamLeaderSevas.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedTeamLeaderSevas.map((seva) => (
+                    <button
+                      key={seva.id}
+                      type="button"
+                      onClick={() => toggleLeaderSeva(seva.id)}
+                      className="rounded-full bg-[#102a56] px-4 py-2 text-xs font-black text-white"
+                    >
+                      {seva.name} ×
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveLeaderSevas}
+                disabled={saving}
+                className="mt-5 w-full rounded-2xl bg-[#102a56] px-4 py-4 text-sm font-black text-white disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Assignment"}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {activeTab === "access" && (
+          <>
+            <section className="rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#2563eb]">
+                    Permissions
+                  </p>
+
+                  <h2 className="mt-1 text-xl font-black text-[#172033]">
+                    Access Areas
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openAddAccessForm}
+                  className="rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white"
+                >
+                  Add
+                </button>
+              </div>
+            </section>
+
+            {showAccessForm && (
+              <form
+                onSubmit={handleAccessSubmit}
+                className="space-y-4 rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]"
+              >
+                <h3 className="text-xl font-black text-[#172033]">
+                  {editingAccessArea ? "Edit Access Area" : "Add Access Area"}
+                </h3>
+
+                <Input
+                  label="Access Area Name"
+                  value={accessName}
+                  onChange={setAccessName}
+                  placeholder="Example: Seva Bhawan"
+                />
+
+                <div>
+                  <label className="mb-2 block text-sm font-black text-[#172033]">
+                    Description Optional
+                  </label>
+
+                  <textarea
+                    value={accessDescription}
+                    onChange={(e) => setAccessDescription(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none"
+                  />
+                </div>
+
+                {editingAccessArea && (
+                  <label className="flex items-center gap-3 rounded-2xl bg-[#f8fafc] p-4 text-sm font-black text-[#172033]">
+                    <input
+                      type="checkbox"
+                      checked={accessActive}
+                      onChange={(e) => setAccessActive(e.target.checked)}
+                    />
+                    Active Access Area
+                  </label>
+                )}
+
+                <FormButtons
+                  saving={saving}
+                  onCancel={() => setShowAccessForm(false)}
+                />
+              </form>
             )}
-          </div>
-        </div>
 
-        <div className="rounded-[32px] border border-[#eadfce] bg-[#fffaf3] p-5 shadow-[0_16px_45px_rgba(90,64,43,0.10)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#a88a6d]">
-            Data Cleanup
-          </p>
+            <section className="space-y-3">
+              {loading ? (
+                <LoadingCard text="Loading access areas..." />
+              ) : accessAreas.length === 0 ? (
+                <LoadingCard text="No access areas found." />
+              ) : (
+                accessAreas.map((area) => (
+                  <div
+                    key={area.id}
+                    className="rounded-[26px] border border-[#d9e0ee] bg-white p-5 shadow-[0_12px_30px_rgba(16,42,86,0.07)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-black text-[#172033]">
+                          {area.name}
+                        </h3>
 
-          <h2 className="mt-2 text-2xl font-black text-[#2f241d]">
-            Delete Old Records
-          </h2>
+                        {area.description && (
+                          <p className="mt-2 text-sm font-semibold leading-6 text-[#697386]">
+                            {area.description}
+                          </p>
+                        )}
+                      </div>
 
-          <p className="mt-2 text-sm leading-6 text-[#715b48]">
-            Admin password is required before deleting old data.
-          </p>
+                      <span
+                        className={`rounded-full px-3 py-2 text-[11px] font-black ${
+                          area.active
+                            ? "bg-green-50 text-green-700"
+                            : "bg-red-50 text-red-700"
+                        }`}
+                      >
+                        {area.active ? "Active" : "Inactive"}
+                      </span>
+                    </div>
 
-          <div className="mt-4">
-            <LoadingButton
-              loading={loadingCleanup1Day}
-              loadingText="Deleting old data..."
-              onClick={handleCleanupOneDay}
-              className="bg-[#8a5d3c]"
-            >
-              Delete Data Older Than 1 Day
-            </LoadingButton>
-          </div>
-        </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditAccessForm(area)}
+                        className="rounded-2xl border border-[#d9e0ee] bg-[#eef3fb] px-4 py-3 text-sm font-black text-[#102a56]"
+                      >
+                        Edit
+                      </button>
 
-        <div className="rounded-[32px] border border-red-100 bg-red-50 p-5 shadow-sm">
-          <h2 className="text-xl font-black text-red-800">
-            Reset Token Counter
-          </h2>
-
-          <p className="mt-2 text-sm leading-6 text-red-700">
-            Use this only when you want token numbers to start again from 1.
-          </p>
-
-          <div className="mt-4">
-            <LoadingButton
-              loading={loadingReset}
-              loadingText="Resetting..."
-              onClick={handleResetCounter}
-              className="bg-red-700"
-            >
-              Reset Counter
-            </LoadingButton>
-          </div>
-        </div>
-
-        {message && (
-          <div className="rounded-2xl border border-green-100 bg-green-50 p-4 text-sm font-bold text-green-700">
-            {message}
-          </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAccessArea(area)}
+                        className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-black text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </section>
+          </>
         )}
       </div>
     </AppShell>
   );
+}
+
+function TabButton({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl px-3 py-3 text-xs font-black ${
+        active ? "bg-[#102a56] text-white" : "text-[#102a56]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder = "",
+  disabled = false,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-black text-[#172033]">
+        {label}
+      </label>
+
+      <input
+        type={type}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] disabled:opacity-60"
+      />
+    </div>
+  );
+}
+
+function FormButtons({ saving, onCancel }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded-2xl border border-[#d9e0ee] bg-[#eef3fb] px-4 py-4 text-sm font-black text-[#102a56]"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded-2xl bg-[#102a56] px-4 py-4 text-sm font-black text-white disabled:opacity-60"
+      >
+        {saving ? "Saving..." : "Save"}
+      </button>
+    </div>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <div className="mt-3 rounded-2xl bg-[#f8fafc] p-3">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#697386]">
+        {label}
+      </p>
+
+      <p className="mt-1 text-sm font-black text-[#102a56]">{value}</p>
+    </div>
+  );
+}
+
+function LoadingCard({ text }) {
+  return (
+    <div className="rounded-[26px] border border-[#d9e0ee] bg-white p-5 text-sm font-black text-[#102a56]">
+      {text}
+    </div>
+  );
+}
+
+function formatRole(role) {
+  if (role === "admin") return "Admin";
+  if (role === "team_leader") return "Team Leader";
+  return "View Only";
 }

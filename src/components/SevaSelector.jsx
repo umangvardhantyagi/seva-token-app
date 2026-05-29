@@ -10,7 +10,7 @@ export default function SevaSelector({ value, onChange }) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-4 text-base font-bold text-[#2f241d] shadow-sm outline-none transition focus:border-[#8a5d3c] focus:bg-white"
+        className="w-full rounded-2xl border border-[#eadfce] bg-[#ffffff] px-4 py-4 text-base font-bold text-[#2f241d] shadow-sm outline-none transition focus:border-[#8a5d3c] focus:bg-white"
       >
         <option value="">Choose seva</option>
 

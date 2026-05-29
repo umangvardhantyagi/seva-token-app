@@ -1,23 +1,36 @@
+import PWARegister from "@/components/PWARegister";
 import "./globals.css";
 
 export const metadata = {
-  title: "Seva Token App",
-  description: "Seva token management app",
+  title: "Sadhak Directory",
+  description: "Keli Kunj Sadhak Directory and ID Verification App",
   manifest: "/manifest.json",
+  themeColor: "#102a56",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Sadhak Directory",
+  },
   icons: {
-    icon: "/app-icon.jpg",
-    apple: "/app-icon.jpg",
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
   },
 };
 
 export const viewport = {
-  themeColor: "#7b4f32",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#102a56",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PWARegister />
+        {children}
+      </body>
     </html>
   );
 }

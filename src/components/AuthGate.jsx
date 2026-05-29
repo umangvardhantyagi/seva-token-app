@@ -18,7 +18,7 @@ export default function AuthGate({ children }) {
 
     const session = getLocalSession();
 
-    if (!session) {
+    if (!session?.loginId) {
       router.replace("/login");
       return;
     }
@@ -28,9 +28,9 @@ export default function AuthGate({ children }) {
 
   if (checking) {
     return (
-      <main className="min-h-screen bg-[#f5efe6] px-4 py-6 text-[#2f241d]">
-        <div className="mx-auto max-w-md rounded-[28px] border border-[#eadfce] bg-[#fffaf3] p-6 text-center shadow-[0_12px_35px_rgba(90,64,43,0.08)]">
-          <p className="text-sm font-black text-[#7b4f32]">Opening app...</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-4">
+        <div className="rounded-[28px] border border-[#eadfce] bg-[#ffffff] p-5 text-sm font-black text-[#7b4f32] shadow-sm">
+          Loading...
         </div>
       </main>
     );
