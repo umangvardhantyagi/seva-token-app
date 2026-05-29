@@ -1,94 +1,66 @@
 import { supabase } from "./supabase";
-
-async function createSadhakCode() {
-  const { data, error } = await supabase.rpc("get_next_sadhak_code");
-
-  if (error) {
-    throw new Error("Sadhak ID generation failed: " + error.message);
-  }
-
-  return data;
-}
+import { compressImageFile } from "./imageUtils";
 
 export async function getDashboardStats() {
   const [
-    sadhakCountResult,
-    sevaCountResult,
-    teamLeaderCountResult,
-    accessCountResult,
-    recentSadhaksResult,
+    totalSadhaksResult,
+    activeSadhaksResult,
+    totalSevasResult,
+    totalAccessAreasResult,
   ] = await Promise.all([
+    supabase.from("sadhaks").select("id", { count: "exact", head: true }),
     supabase
       .from("sadhaks")
       .select("id", { count: "exact", head: true })
       .eq("active", true),
-
-    supabase
-      .from("sevas")
-      .select("id", { count: "exact", head: true })
-      .eq("active", true),
-
-    supabase
-      .from("users")
-      .select("login_id", { count: "exact", head: true })
-      .eq("role", "team_leader")
-      .eq("active", true),
-
-    supabase
-      .from("access_areas")
-      .select("id", { count: "exact", head: true })
-      .eq("active", true),
-
-    supabase
-      .from("sadhaks")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(5),
+    supabase.from("sevas").select("id", { count: "exact", head: true }),
+    supabase.from("access_areas").select("id", { count: "exact", head: true }),
   ]);
 
-  if (sadhakCountResult.error) {
-    throw new Error("Sadhak count failed: " + sadhakCountResult.error.message);
-  }
-
-  if (sevaCountResult.error) {
-    throw new Error("Seva count failed: " + sevaCountResult.error.message);
-  }
-
-  if (teamLeaderCountResult.error) {
+  if (totalSadhaksResult.error) {
     throw new Error(
-      "Team leader count failed: " + teamLeaderCountResult.error.message
+      "Unable to load sadhak count: " + totalSadhaksResult.error.message
     );
   }
 
-  if (accessCountResult.error) {
-    throw new Error("Access count failed: " + accessCountResult.error.message);
+  if (activeSadhaksResult.error) {
+    throw new Error(
+      "Unable to load active sadhak count: " +
+        activeSadhaksResult.error.message
+    );
   }
 
-  if (recentSadhaksResult.error) {
+  if (totalSevasResult.error) {
     throw new Error(
-      "Recent sadhaks failed: " + recentSadhaksResult.error.message
+      "Unable to load seva count: " + totalSevasResult.error.message
+    );
+  }
+
+  if (totalAccessAreasResult.error) {
+    throw new Error(
+      "Unable to load access count: " + totalAccessAreasResult.error.message
     );
   }
 
   return {
-    totalSadhaks: sadhakCountResult.count || 0,
-    totalSevas: sevaCountResult.count || 0,
-    totalTeamLeaders: teamLeaderCountResult.count || 0,
-    totalAccessAreas: accessCountResult.count || 0,
-    recentSadhaks: (recentSadhaksResult.data || []).map(mapSadhak),
+    totalSadhaks: totalSadhaksResult.count || 0,
+    activeSadhaks: activeSadhaksResult.count || 0,
+    totalSevas: totalSevasResult.count || 0,
+    totalAccessAreas: totalAccessAreasResult.count || 0,
   };
 }
 
-export async function getSevas({ searchText = "" } = {}) {
-  const text = searchText.trim().toLowerCase();
+/* -------------------- SEVAS -------------------- */
 
-  let query = supabase
-    .from("sevas")
-    .select("*")
-    .order("name", { ascending: true });
+export async function getSevas({ searchText = "", activeOnly = false } = {}) {
+  let query = supabase.from("sevas").select("*").order("name");
 
-  if (text) {
-    query = query.ilike("name_lower", `%${text}%`);
+  if (activeOnly) {
+    query = query.eq("active", true);
+  }
+
+  if (searchText?.trim()) {
+    query = query.ilike("name", `%${searchText.trim()}%`);
   }
 
   const { data, error } = await query.limit(500);
@@ -100,34 +72,23 @@ export async function getSevas({ searchText = "" } = {}) {
   return (data || []).map(mapSeva);
 }
 
-export async function createSeva({
-  name,
-  description = "",
-  timing = "",
-  createdBy,
-}) {
+export async function createSeva({ name, description = "" }) {
   if (!name?.trim()) {
     throw new Error("Seva name is required");
   }
 
-  const cleanName = name.trim();
-
   const { data, error } = await supabase
     .from("sevas")
     .insert({
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      description: description.trim(),
-      timing: timing.trim(),
+      name: name.trim(),
+      description: description?.trim() || "",
       active: true,
-      created_by_login_id: createdBy?.loginId || "",
-      created_by_name: createdBy?.name || "",
     })
     .select("*")
     .single();
 
   if (error) {
-    throw new Error("Seva save failed: " + error.message);
+    throw new Error("Seva creation failed: " + error.message);
   }
 
   return mapSeva(data);
@@ -137,8 +98,7 @@ export async function updateSeva({
   sevaId,
   name,
   description = "",
-  timing = "",
-  active,
+  active = true,
 }) {
   if (!sevaId) {
     throw new Error("Seva ID missing");
@@ -148,15 +108,11 @@ export async function updateSeva({
     throw new Error("Seva name is required");
   }
 
-  const cleanName = name.trim();
-
   const { data, error } = await supabase
     .from("sevas")
     .update({
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      description: description.trim(),
-      timing: timing.trim(),
+      name: name.trim(),
+      description: description?.trim() || "",
       active: Boolean(active),
     })
     .eq("id", sevaId)
@@ -184,16 +140,20 @@ export async function deleteSeva(sevaId) {
   return true;
 }
 
-export async function getAccessAreas({ searchText = "" } = {}) {
-  const text = searchText.trim().toLowerCase();
+/* -------------------- ACCESS AREAS -------------------- */
 
-  let query = supabase
-    .from("access_areas")
-    .select("*")
-    .order("name", { ascending: true });
+export async function getAccessAreas({
+  searchText = "",
+  activeOnly = false,
+} = {}) {
+  let query = supabase.from("access_areas").select("*").order("name");
 
-  if (text) {
-    query = query.ilike("name_lower", `%${text}%`);
+  if (activeOnly) {
+    query = query.eq("active", true);
+  }
+
+  if (searchText?.trim()) {
+    query = query.ilike("name", `%${searchText.trim()}%`);
   }
 
   const { data, error } = await query.limit(500);
@@ -210,31 +170,18 @@ export async function createAccessArea({ name, description = "" }) {
     throw new Error("Access area name is required");
   }
 
-  const cleanName = name.trim();
-
   const { data, error } = await supabase
     .from("access_areas")
     .insert({
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      description: description.trim(),
+      name: name.trim(),
+      description: description?.trim() || "",
       active: true,
     })
     .select("*")
     .single();
 
   if (error) {
-    if (error.message?.toLowerCase().includes("duplicate")) {
-      const existing = await getAccessAreas({ searchText: cleanName });
-
-      const matched = existing.find(
-        (item) => item.nameLower === cleanName.toLowerCase()
-      );
-
-      if (matched) return matched;
-    }
-
-    throw new Error("Access area save failed: " + error.message);
+    throw new Error("Access area creation failed: " + error.message);
   }
 
   return mapAccessArea(data);
@@ -244,7 +191,7 @@ export async function updateAccessArea({
   accessAreaId,
   name,
   description = "",
-  active,
+  active = true,
 }) {
   if (!accessAreaId) {
     throw new Error("Access area ID missing");
@@ -254,14 +201,11 @@ export async function updateAccessArea({
     throw new Error("Access area name is required");
   }
 
-  const cleanName = name.trim();
-
   const { data, error } = await supabase
     .from("access_areas")
     .update({
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      description: description.trim(),
+      name: name.trim(),
+      description: description?.trim() || "",
       active: Boolean(active),
     })
     .eq("id", accessAreaId)
@@ -292,49 +236,44 @@ export async function deleteAccessArea(accessAreaId) {
   return true;
 }
 
+/* -------------------- SADHAKS -------------------- */
+
+async function createSadhakCode() {
+  const { data, error } = await supabase.rpc("get_next_sadhak_code");
+
+  if (error) {
+    throw new Error(
+      "Unable to generate Sadhak ID. Please run get_next_sadhak_code SQL function in Supabase. " +
+        error.message
+    );
+  }
+
+  return data;
+}
+
 export async function getSadhaks({
   searchText = "",
   sevaId = "",
-  activeOnly = true,
+  activeOnly = false,
+  limit = 100,
 } = {}) {
-  const text = searchText.trim().toLowerCase();
+  let sadhakIdsFromSeva = null;
 
   if (sevaId) {
-    const { data, error } = await supabase
+    const { data: sevaRows, error: sevaError } = await supabase
       .from("sadhak_sevas")
-      .select(
-        `
-        sadhak_id,
-        sadhaks (*)
-      `
-      )
-      .eq("seva_id", sevaId)
-      .limit(1000);
+      .select("sadhak_id")
+      .eq("seva_id", sevaId);
 
-    if (error) {
-      throw new Error("Unable to load sadhaks by seva: " + error.message);
+    if (sevaError) {
+      throw new Error("Unable to filter by seva: " + sevaError.message);
     }
 
-    let list = (data || [])
-      .map((item) => item.sadhaks)
-      .filter(Boolean)
-      .map(mapSadhak);
+    sadhakIdsFromSeva = (sevaRows || []).map((item) => item.sadhak_id);
 
-    if (activeOnly) {
-      list = list.filter((item) => item.active);
+    if (sadhakIdsFromSeva.length === 0) {
+      return [];
     }
-
-    if (text) {
-      list = list.filter((item) => {
-        return (
-          item.nameLower.includes(text) ||
-          item.sadhakCode.toLowerCase().includes(text) ||
-          item.mobile.includes(text)
-        );
-      });
-    }
-
-    return list;
   }
 
   let query = supabase
@@ -346,13 +285,19 @@ export async function getSadhaks({
     query = query.eq("active", true);
   }
 
+  if (sadhakIdsFromSeva) {
+    query = query.in("id", sadhakIdsFromSeva);
+  }
+
+  const text = searchText?.trim();
+
   if (text) {
     query = query.or(
-      `name_lower.ilike.%${text}%,sadhak_code.ilike.%${text}%,mobile.ilike.%${text}%`
+      `name.ilike.%${text}%,mobile.ilike.%${text}%,sadhak_code.ilike.%${text}%`
     );
   }
 
-  const { data, error } = await query.limit(1000);
+  const { data, error } = await query.limit(limit);
 
   if (error) {
     throw new Error("Unable to load sadhaks: " + error.message);
@@ -363,364 +308,216 @@ export async function getSadhaks({
 
 export async function createSadhak({
   name,
-  mobile = "",
-  address = "",
+  mobile,
+  address,
   comment = "",
+  photoFile,
   sevaIds = [],
   accessAreaIds = [],
   customAccessAreaNames = [],
-  photoFile = null,
   createdBy,
 }) {
-  if (!name?.trim()) {
-    throw new Error("Sadhak name is required");
-  }
-
-  if (!createdBy?.loginId) {
-    throw new Error("Login session missing");
-  }
-
-  if (!photoFile) {
-    throw new Error("Sadhak photo is required");
-  }
-
-  const cleanMobileForCheck = mobile.trim();
-
-  if (!cleanMobileForCheck) {
-    throw new Error("Mobile number is required. Use 00 only if not available.");
-  }
-
-  if (
-    cleanMobileForCheck !== "00" &&
-    !/^[0-9]{10}$/.test(cleanMobileForCheck)
-  ) {
-    throw new Error(
-      "Mobile number must be 10 digits, or use 00 if not available."
-    );
-  }
-
-  if (!address.trim()) {
-    throw new Error("Address is required");
-  }
-
-  if (!Array.isArray(sevaIds) || sevaIds.length === 0) {
-    throw new Error("At least one seva is required");
-  }
-
-  const cleanName = name.trim();
-  const cleanMobile = cleanMobileForCheck;
-  const cleanAddress = address.trim();
-  const cleanComment = comment.trim();
+  validateSadhakPayload({
+    name,
+    mobile,
+    address,
+    photoRequired: true,
+    photoFile,
+    sevaIds,
+  });
 
   const sadhakCode = await createSadhakCode();
-  const finalAccessAreaIds = [...accessAreaIds];
-
-  for (const accessName of customAccessAreaNames) {
-    if (!accessName?.trim()) continue;
-
-    const accessArea = await createAccessArea({
-      name: accessName.trim(),
-      description: "Added while creating sadhak profile",
-    });
-
-    if (accessArea?.id && !finalAccessAreaIds.includes(accessArea.id)) {
-      finalAccessAreaIds.push(accessArea.id);
-    }
-  }
+  const qrToken =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const { data: insertedSadhak, error: insertError } = await supabase
     .from("sadhaks")
     .insert({
       sadhak_code: sadhakCode,
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      father_name: "",
-      mobile: cleanMobile,
-      alternate_mobile: "",
-      address: cleanAddress,
-      city: "",
-      state: "",
-      notes: cleanComment,
-      active: true,
+      name: name.trim(),
+      mobile: mobile.trim(),
+      address: address.trim(),
+      notes: comment?.trim() || "",
       photo_url: "",
       photo_path: "",
-      created_by_login_id: createdBy.loginId,
-      created_by_name: createdBy.name || createdBy.loginId,
-      updated_by_login_id: createdBy.loginId,
-      updated_by_name: createdBy.name || createdBy.loginId,
+      qr_token: qrToken,
+      active: true,
+      created_by: createdBy?.loginId || "",
+      updated_by: createdBy?.loginId || "",
     })
     .select("*")
     .single();
 
   if (insertError) {
-    throw new Error("Sadhak save failed: " + insertError.message);
+    throw new Error("Sadhak creation failed: " + insertError.message);
   }
 
-  if (sevaIds.length > 0) {
-    const sevaRows = sevaIds.map((sevaId) => ({
-      sadhak_id: insertedSadhak.id,
-      seva_id: sevaId,
-    }));
-
-    const { error: sevaError } = await supabase
-      .from("sadhak_sevas")
-      .insert(sevaRows);
-
-    if (sevaError) {
-      throw new Error("Sadhak seva save failed: " + sevaError.message);
-    }
-  }
-
-  if (finalAccessAreaIds.length > 0) {
-    const accessRows = finalAccessAreaIds.map((accessAreaId) => ({
-      sadhak_id: insertedSadhak.id,
-      access_area_id: accessAreaId,
-    }));
-
-    const { error: accessError } = await supabase
-      .from("sadhak_access")
-      .insert(accessRows);
-
-    if (accessError) {
-      throw new Error("Sadhak access save failed: " + accessError.message);
-    }
-  }
-
-  const fileExtension = photoFile.name?.split(".").pop() || "jpg";
-  const photoPath = `sadhaks/${insertedSadhak.id}-${Date.now()}.${fileExtension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("sadhak-photos")
-    .upload(photoPath, photoFile, {
-      upsert: false,
-      contentType: photoFile.type || "image/jpeg",
+  try {
+    const compressedPhoto = await compressImageFile(photoFile, {
+      maxWidth: 900,
+      maxHeight: 900,
+      quality: 0.72,
+      maxSizeKB: 500,
     });
 
-  if (uploadError) {
-    throw new Error("Photo upload failed: " + uploadError.message);
+    const photoPath = `${insertedSadhak.id}/${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("sadhak-photos")
+      .upload(photoPath, compressedPhoto, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error("Photo upload failed: " + uploadError.message);
+    }
+
+    const { data: publicPhotoData } = supabase.storage
+      .from("sadhak-photos")
+      .getPublicUrl(photoPath);
+
+    const photoUrl = publicPhotoData?.publicUrl || "";
+
+    const { error: photoUpdateError } = await supabase
+      .from("sadhaks")
+      .update({
+        photo_url: photoUrl,
+        photo_path: photoPath,
+      })
+      .eq("id", insertedSadhak.id);
+
+    if (photoUpdateError) {
+      throw new Error("Photo save failed: " + photoUpdateError.message);
+    }
+
+    await saveSadhakSevas(insertedSadhak.id, sevaIds);
+    await saveSadhakAccessAreas({
+      sadhakId: insertedSadhak.id,
+      accessAreaIds,
+      customAccessAreaNames,
+    });
+
+    return getSadhakProfileById(insertedSadhak.id);
+  } catch (error) {
+    await supabase.from("sadhak_sevas").delete().eq("sadhak_id", insertedSadhak.id);
+    await supabase.from("sadhak_access").delete().eq("sadhak_id", insertedSadhak.id);
+
+    if (insertedSadhak.photo_path) {
+      await supabase.storage
+        .from("sadhak-photos")
+        .remove([insertedSadhak.photo_path]);
+    }
+
+    await supabase.from("sadhaks").delete().eq("id", insertedSadhak.id);
+
+    throw error;
   }
-
-  const { data: publicUrlData } = supabase.storage
-    .from("sadhak-photos")
-    .getPublicUrl(photoPath);
-
-  const { data: updatedSadhak, error: updateError } = await supabase
-    .from("sadhaks")
-    .update({
-      photo_url: publicUrlData.publicUrl,
-      photo_path: photoPath,
-    })
-    .eq("id", insertedSadhak.id)
-    .select("*")
-    .single();
-
-  if (updateError) {
-    throw new Error("Photo URL update failed: " + updateError.message);
-  }
-
-  return mapSadhak(updatedSadhak);
 }
 
 export async function updateSadhak({
   sadhakId,
   name,
-  mobile = "",
-  address = "",
+  mobile,
+  address,
   comment = "",
+  photoFile = null,
   sevaIds = [],
   accessAreaIds = [],
   customAccessAreaNames = [],
-  photoFile = null,
-  oldPhotoPath = "",
+  active = true,
   updatedBy,
 }) {
   if (!sadhakId) {
     throw new Error("Sadhak ID missing");
   }
 
-  if (!name?.trim()) {
-    throw new Error("Sadhak name is required");
-  }
+  validateSadhakPayload({
+    name,
+    mobile,
+    address,
+    photoRequired: false,
+    photoFile,
+    sevaIds,
+  });
 
-  if (!updatedBy?.loginId) {
-    throw new Error("Login session missing");
-  }
+  const updateData = {
+    name: name.trim(),
+    mobile: mobile.trim(),
+    address: address.trim(),
+    notes: comment?.trim() || "",
+    active: Boolean(active),
+    updated_by: updatedBy?.loginId || "",
+    updated_at: new Date().toISOString(),
+  };
 
-  const cleanMobileForCheck = mobile.trim();
-
-  if (!cleanMobileForCheck) {
-    throw new Error("Mobile number is required. Use 00 only if not available.");
-  }
-
-  if (
-    cleanMobileForCheck !== "00" &&
-    !/^[0-9]{10}$/.test(cleanMobileForCheck)
-  ) {
-    throw new Error(
-      "Mobile number must be 10 digits, or use 00 if not available."
-    );
-  }
-
-  if (!address.trim()) {
-    throw new Error("Address is required");
-  }
-
-  if (!Array.isArray(sevaIds) || sevaIds.length === 0) {
-    throw new Error("At least one seva is required");
-  }
-
-  const cleanName = name.trim();
-  const cleanMobile = cleanMobileForCheck;
-  const cleanAddress = address.trim();
-  const cleanComment = comment.trim();
-
-  const finalAccessAreaIds = [...accessAreaIds];
-
-  for (const accessName of customAccessAreaNames) {
-    if (!accessName?.trim()) continue;
-
-    const accessArea = await createAccessArea({
-      name: accessName.trim(),
-      description: "Added while updating sadhak profile",
+  if (photoFile) {
+    const compressedPhoto = await compressImageFile(photoFile, {
+      maxWidth: 900,
+      maxHeight: 900,
+      quality: 0.72,
+      maxSizeKB: 500,
     });
 
-    if (accessArea?.id && !finalAccessAreaIds.includes(accessArea.id)) {
-      finalAccessAreaIds.push(accessArea.id);
+    const newPhotoPath = `${sadhakId}/${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("sadhak-photos")
+      .upload(newPhotoPath, compressedPhoto, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error("Photo upload failed: " + uploadError.message);
     }
+
+    const { data: publicPhotoData } = supabase.storage
+      .from("sadhak-photos")
+      .getPublicUrl(newPhotoPath);
+
+    updateData.photo_url = publicPhotoData?.publicUrl || "";
+    updateData.photo_path = newPhotoPath;
   }
 
-  const { data: updatedSadhak, error: updateError } = await supabase
+  const { error: updateError } = await supabase
     .from("sadhaks")
-    .update({
-      name: cleanName,
-      name_lower: cleanName.toLowerCase(),
-      mobile: cleanMobile,
-      address: cleanAddress,
-      notes: cleanComment,
-      updated_by_login_id: updatedBy.loginId,
-      updated_by_name: updatedBy.name || updatedBy.loginId,
-    })
-    .eq("id", sadhakId)
-    .select("*")
-    .single();
+    .update(updateData)
+    .eq("id", sadhakId);
 
   if (updateError) {
     throw new Error("Sadhak update failed: " + updateError.message);
   }
 
-  const { error: deleteSevaError } = await supabase
-    .from("sadhak_sevas")
-    .delete()
-    .eq("sadhak_id", sadhakId);
+  await saveSadhakSevas(sadhakId, sevaIds);
+  await saveSadhakAccessAreas({
+    sadhakId,
+    accessAreaIds,
+    customAccessAreaNames,
+  });
 
-  if (deleteSevaError) {
-    throw new Error("Old seva clear failed: " + deleteSevaError.message);
-  }
-
-  const sevaRows = sevaIds.map((sevaId) => ({
-    sadhak_id: sadhakId,
-    seva_id: sevaId,
-  }));
-
-  const { error: sevaError } = await supabase
-    .from("sadhak_sevas")
-    .insert(sevaRows);
-
-  if (sevaError) {
-    throw new Error("Sadhak seva update failed: " + sevaError.message);
-  }
-
-  const { error: deleteAccessError } = await supabase
-    .from("sadhak_access")
-    .delete()
-    .eq("sadhak_id", sadhakId);
-
-  if (deleteAccessError) {
-    throw new Error("Old access clear failed: " + deleteAccessError.message);
-  }
-
-  if (finalAccessAreaIds.length > 0) {
-    const accessRows = finalAccessAreaIds.map((accessAreaId) => ({
-      sadhak_id: sadhakId,
-      access_area_id: accessAreaId,
-    }));
-
-    const { error: accessError } = await supabase
-      .from("sadhak_access")
-      .insert(accessRows);
-
-    if (accessError) {
-      throw new Error("Sadhak access update failed: " + accessError.message);
-    }
-  }
-
-  if (!photoFile) {
-    return mapSadhak(updatedSadhak);
-  }
-
-  if (oldPhotoPath) {
-    const { error: oldPhotoError } = await supabase.storage
-      .from("sadhak-photos")
-      .remove([oldPhotoPath]);
-
-    if (oldPhotoError) {
-      console.error("Old photo delete failed:", oldPhotoError.message);
-    }
-  }
-
-  const fileExtension = photoFile.name?.split(".").pop() || "jpg";
-  const photoPath = `sadhaks/${sadhakId}-${Date.now()}.${fileExtension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("sadhak-photos")
-    .upload(photoPath, photoFile, {
-      upsert: false,
-      contentType: photoFile.type || "image/jpeg",
-    });
-
-  if (uploadError) {
-    throw new Error("Photo upload failed: " + uploadError.message);
-  }
-
-  const { data: publicUrlData } = supabase.storage
-    .from("sadhak-photos")
-    .getPublicUrl(photoPath);
-
-  const { data: photoUpdatedSadhak, error: photoUpdateError } = await supabase
-    .from("sadhaks")
-    .update({
-      photo_url: publicUrlData.publicUrl,
-      photo_path: photoPath,
-      updated_by_login_id: updatedBy.loginId,
-      updated_by_name: updatedBy.name || updatedBy.loginId,
-    })
-    .eq("id", sadhakId)
-    .select("*")
-    .single();
-
-  if (photoUpdateError) {
-    throw new Error("Photo update failed: " + photoUpdateError.message);
-  }
-
-  return mapSadhak(photoUpdatedSadhak);
+  return getSadhakProfileById(sadhakId);
 }
 
 export async function deleteSadhak(sadhak) {
-  if (!sadhak?.id) {
+  const sadhakId = typeof sadhak === "string" ? sadhak : sadhak?.id;
+
+  if (!sadhakId) {
     throw new Error("Sadhak ID missing");
   }
 
-  if (sadhak.photoPath) {
-    const { error: photoError } = await supabase.storage
-      .from("sadhak-photos")
-      .remove([sadhak.photoPath]);
+  const photoPath = typeof sadhak === "object" ? sadhak?.photoPath : "";
 
-    if (photoError) {
-      console.error("Photo delete failed:", photoError.message);
-    }
+  await supabase.from("sadhak_sevas").delete().eq("sadhak_id", sadhakId);
+  await supabase.from("sadhak_access").delete().eq("sadhak_id", sadhakId);
+
+  if (photoPath) {
+    await supabase.storage.from("sadhak-photos").remove([photoPath]);
   }
 
-  const { error } = await supabase.from("sadhaks").delete().eq("id", sadhak.id);
+  const { error } = await supabase.from("sadhaks").delete().eq("id", sadhakId);
 
   if (error) {
     throw new Error("Sadhak delete failed: " + error.message);
@@ -741,11 +538,21 @@ export async function getSadhakProfileById(sadhakId) {
       *,
       sadhak_sevas (
         seva_id,
-        sevas (*)
+        sevas (
+          id,
+          name,
+          description,
+          active
+        )
       ),
       sadhak_access (
         access_area_id,
-        access_areas (*)
+        access_areas (
+          id,
+          name,
+          description,
+          active
+        )
       )
     `
     )
@@ -756,9 +563,7 @@ export async function getSadhakProfileById(sadhakId) {
     throw new Error("Unable to load sadhak profile: " + error.message);
   }
 
-  if (!data) {
-    throw new Error("Sadhak profile not found");
-  }
+  if (!data) return null;
 
   return mapSadhakProfile(data);
 }
@@ -775,11 +580,21 @@ export async function getSadhakProfileByQrToken(qrToken) {
       *,
       sadhak_sevas (
         seva_id,
-        sevas (*)
+        sevas (
+          id,
+          name,
+          description,
+          active
+        )
       ),
       sadhak_access (
         access_area_id,
-        access_areas (*)
+        access_areas (
+          id,
+          name,
+          description,
+          active
+        )
       )
     `
     )
@@ -787,26 +602,157 @@ export async function getSadhakProfileByQrToken(qrToken) {
     .maybeSingle();
 
   if (error) {
-    throw new Error("Unable to load QR profile: " + error.message);
+    throw new Error("Unable to verify QR profile: " + error.message);
   }
 
-  if (!data) {
-    throw new Error("No sadhak found for this QR");
-  }
+  if (!data) return null;
 
   return mapSadhakProfile(data);
 }
 
+/* -------------------- RELATION HELPERS -------------------- */
+
+async function saveSadhakSevas(sadhakId, sevaIds = []) {
+  await supabase.from("sadhak_sevas").delete().eq("sadhak_id", sadhakId);
+
+  const uniqueSevaIds = [...new Set(sevaIds)].filter(Boolean);
+
+  if (uniqueSevaIds.length === 0) return true;
+
+  const rows = uniqueSevaIds.map((sevaId) => ({
+    sadhak_id: sadhakId,
+    seva_id: sevaId,
+  }));
+
+  const { error } = await supabase.from("sadhak_sevas").insert(rows);
+
+  if (error) {
+    throw new Error("Sadhak seva save failed: " + error.message);
+  }
+
+  return true;
+}
+
+async function saveSadhakAccessAreas({
+  sadhakId,
+  accessAreaIds = [],
+  customAccessAreaNames = [],
+}) {
+  await supabase.from("sadhak_access").delete().eq("sadhak_id", sadhakId);
+
+  const finalAccessAreaIds = [...new Set(accessAreaIds)].filter(Boolean);
+
+  for (const customName of customAccessAreaNames || []) {
+    const cleanName = customName?.trim();
+
+    if (!cleanName) continue;
+
+    const accessArea = await findOrCreateAccessArea(cleanName);
+    finalAccessAreaIds.push(accessArea.id);
+  }
+
+  const uniqueAccessAreaIds = [...new Set(finalAccessAreaIds)].filter(Boolean);
+
+  if (uniqueAccessAreaIds.length === 0) return true;
+
+  const rows = uniqueAccessAreaIds.map((accessAreaId) => ({
+    sadhak_id: sadhakId,
+    access_area_id: accessAreaId,
+  }));
+
+  const { error } = await supabase.from("sadhak_access").insert(rows);
+
+  if (error) {
+    throw new Error("Sadhak access save failed: " + error.message);
+  }
+
+  return true;
+}
+
+async function findOrCreateAccessArea(name) {
+  const { data: existing, error: existingError } = await supabase
+    .from("access_areas")
+    .select("*")
+    .ilike("name", name)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error("Access area check failed: " + existingError.message);
+  }
+
+  if (existing) {
+    return mapAccessArea(existing);
+  }
+
+  const { data, error } = await supabase
+    .from("access_areas")
+    .insert({
+      name,
+      description: "Custom access area",
+      active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Custom access area creation failed: " + error.message);
+  }
+
+  return mapAccessArea(data);
+}
+
+/* -------------------- VALIDATION -------------------- */
+
+function validateSadhakPayload({
+  name,
+  mobile,
+  address,
+  photoRequired,
+  photoFile,
+  sevaIds,
+}) {
+  if (photoRequired && !photoFile) {
+    throw new Error("Please upload sadhak photo");
+  }
+
+  if (!name?.trim()) {
+    throw new Error("Sadhak name is required");
+  }
+
+  if (!mobile?.trim()) {
+    throw new Error("Mobile number is required. Use 00 if not available.");
+  }
+
+  if (!isValidMobile(mobile)) {
+    throw new Error("Mobile number must be 10 digits, or use 00 if not available.");
+  }
+
+  if (!address?.trim()) {
+    throw new Error("Address is required");
+  }
+
+  if (!Array.isArray(sevaIds) || sevaIds.length === 0) {
+    throw new Error("Please select at least one seva");
+  }
+}
+
+function isValidMobile(value) {
+  const clean = value.trim();
+
+  if (clean === "00") return true;
+
+  return /^[0-9]{10}$/.test(clean);
+}
+
+/* -------------------- MAPPERS -------------------- */
+
 function mapSeva(item) {
   return {
     id: item.id,
-    name: item.name,
-    nameLower: item.name_lower,
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
     description: item.description || "",
-    timing: item.timing || "",
     active: item.active,
-    createdByLoginId: item.created_by_login_id,
-    createdByName: item.created_by_name,
     createdAt: item.created_at,
     updatedAt: item.updated_at,
   };
@@ -815,8 +761,8 @@ function mapSeva(item) {
 function mapAccessArea(item) {
   return {
     id: item.id,
-    name: item.name,
-    nameLower: item.name_lower,
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
     description: item.description || "",
     active: item.active,
     createdAt: item.created_at,
@@ -827,24 +773,18 @@ function mapAccessArea(item) {
 function mapSadhak(item) {
   return {
     id: item.id,
-    sadhakCode: item.sadhak_code,
-    name: item.name,
-    nameLower: item.name_lower,
-    fatherName: item.father_name || "",
+    sadhakCode: item.sadhak_code || "",
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
     mobile: item.mobile || "",
-    alternateMobile: item.alternate_mobile || "",
     address: item.address || "",
-    city: item.city || "",
-    state: item.state || "",
+    notes: item.notes || "",
     photoUrl: item.photo_url || "",
     photoPath: item.photo_path || "",
-    notes: item.notes || "",
+    qrToken: item.qr_token || "",
     active: item.active,
-    qrToken: item.qr_token,
-    createdByLoginId: item.created_by_login_id,
-    createdByName: item.created_by_name,
-    updatedByLoginId: item.updated_by_login_id,
-    updatedByName: item.updated_by_name,
+    createdBy: item.created_by || "",
+    updatedBy: item.updated_by || "",
     createdAt: item.created_at,
     updatedAt: item.updated_at,
   };
@@ -853,16 +793,21 @@ function mapSadhak(item) {
 function mapSadhakProfile(item) {
   const base = mapSadhak(item);
 
+  const sevas = (item.sadhak_sevas || [])
+    .map((row) => row.sevas)
+    .filter(Boolean)
+    .map(mapSeva);
+
+  const accessAreas = (item.sadhak_access || [])
+    .map((row) => row.access_areas)
+    .filter(Boolean)
+    .map(mapAccessArea);
+
   return {
     ...base,
-    sevas: (item.sadhak_sevas || [])
-      .map((row) => row.sevas)
-      .filter(Boolean)
-      .map(mapSeva),
-
-    accessAreas: (item.sadhak_access || [])
-      .map((row) => row.access_areas)
-      .filter(Boolean)
-      .map(mapAccessArea),
+    sevas,
+    accessAreas,
+    createdByName: item.created_by || "",
+    updatedByName: item.updated_by || "",
   };
 }

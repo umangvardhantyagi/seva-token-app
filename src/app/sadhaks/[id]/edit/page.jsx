@@ -21,6 +21,7 @@ export default function EditSadhakPage() {
   const router = useRouter();
   const params = useParams();
   const sadhakId = params?.id;
+  const savingRef = useRef(false);
 
   const [currentUser, setCurrentUser] = useState(null);
   const [canManage, setCanManage] = useState(false);
@@ -144,6 +145,8 @@ export default function EditSadhakPage() {
   }
 
   function toggleSeva(sevaId) {
+    if (savingRef.current) return;
+
     setSelectedSevaIds((prev) => {
       if (prev.includes(sevaId)) {
         return prev.filter((id) => id !== sevaId);
@@ -154,6 +157,8 @@ export default function EditSadhakPage() {
   }
 
   function toggleAccessArea(accessAreaId) {
+    if (savingRef.current) return;
+
     setSelectedAccessAreaIds((prev) => {
       if (prev.includes(accessAreaId)) {
         return prev.filter((id) => id !== accessAreaId);
@@ -164,6 +169,8 @@ export default function EditSadhakPage() {
   }
 
   function addCustomAccessArea() {
+    if (savingRef.current) return;
+
     const cleanText = customAccessText.trim();
 
     if (!cleanText) {
@@ -183,6 +190,8 @@ export default function EditSadhakPage() {
   }
 
   function removeCustomAccessArea(name) {
+    if (savingRef.current) return;
+
     setCustomAccessAreaNames((prev) => prev.filter((item) => item !== name));
   }
 
@@ -196,6 +205,8 @@ export default function EditSadhakPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    if (savingRef.current) return;
 
     if (!canManage) {
       alert("You do not have permission to edit this sadhak");
@@ -229,6 +240,7 @@ export default function EditSadhakPage() {
 
     const finalSevaIds = [...new Set([...lockedSevaIds, ...selectedSevaIds])];
 
+    savingRef.current = true;
     setSaving(true);
 
     try {
@@ -250,7 +262,7 @@ export default function EditSadhakPage() {
       router.replace(`/sadhaks/${sadhakId}`);
     } catch (error) {
       alert(error.message);
-    } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -334,19 +346,26 @@ export default function EditSadhakPage() {
             <input
               type="file"
               accept="image/*"
+              disabled={saving}
               onChange={handlePhotoChange}
               className="hidden"
             />
           </label>
         </div>
 
-        <Input label="Name *" value={name} onChange={setName} />
+        <Input
+          label="Name *"
+          value={name}
+          onChange={setName}
+          disabled={saving}
+        />
 
         <Input
           label="Mobile *"
           value={mobile}
           onChange={setMobile}
           placeholder="10 digit mobile or 00"
+          disabled={saving}
         />
 
         <div>
@@ -356,10 +375,11 @@ export default function EditSadhakPage() {
 
           <textarea
             value={address}
+            disabled={saving}
             onChange={(e) => setAddress(e.target.value)}
             rows={3}
             placeholder="Enter full address"
-            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
+            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56] disabled:opacity-60"
           />
         </div>
 
@@ -378,6 +398,7 @@ export default function EditSadhakPage() {
           onToggle={toggleSeva}
           emptyText="No seva found"
           accentClass="bg-[#102a56] text-white"
+          disabled={saving}
         />
 
         {lockedSevaIds.length > 0 && (
@@ -402,6 +423,7 @@ export default function EditSadhakPage() {
           onToggle={toggleAccessArea}
           emptyText="No access area found"
           accentClass="bg-green-700 text-white"
+          disabled={saving}
         />
 
         <div className="rounded-[26px] border border-[#d9e0ee] bg-[#f8fafc] p-4">
@@ -412,15 +434,17 @@ export default function EditSadhakPage() {
           <div className="flex gap-2">
             <input
               value={customAccessText}
+              disabled={saving}
               onChange={(e) => setCustomAccessText(e.target.value)}
               placeholder="Example: Store Room"
-              className="min-w-0 flex-1 rounded-2xl border border-[#d9e0ee] bg-white px-4 py-3 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
+              className="min-w-0 flex-1 rounded-2xl border border-[#d9e0ee] bg-white px-4 py-3 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56] disabled:opacity-60"
             />
 
             <button
               type="button"
+              disabled={saving}
               onClick={addCustomAccessArea}
-              className="rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white"
+              className="rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white disabled:opacity-60"
             >
               Add
             </button>
@@ -432,8 +456,9 @@ export default function EditSadhakPage() {
                 <button
                   key={item}
                   type="button"
+                  disabled={saving}
                   onClick={() => removeCustomAccessArea(item)}
-                  className="rounded-full bg-[#102a56] px-4 py-2 text-xs font-black text-white"
+                  className="rounded-full bg-[#102a56] px-4 py-2 text-xs font-black text-white disabled:opacity-60"
                 >
                   {item} ×
                 </button>
@@ -449,10 +474,11 @@ export default function EditSadhakPage() {
 
           <textarea
             value={comment}
+            disabled={saving}
             onChange={(e) => setComment(e.target.value)}
             rows={3}
             placeholder="Any important note"
-            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
+            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56] disabled:opacity-60"
           />
         </div>
 
@@ -461,6 +487,7 @@ export default function EditSadhakPage() {
             <input
               type="checkbox"
               checked={active}
+              disabled={saving}
               onChange={(e) => setActive(e.target.checked)}
             />
             Active Profile
@@ -470,8 +497,9 @@ export default function EditSadhakPage() {
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
+            disabled={saving}
             onClick={() => router.back()}
-            className="rounded-2xl border border-[#d9e0ee] bg-[#eef3fb] px-4 py-4 text-sm font-black text-[#102a56]"
+            className="rounded-2xl border border-[#d9e0ee] bg-[#eef3fb] px-4 py-4 text-sm font-black text-[#102a56] disabled:opacity-60"
           >
             Cancel
           </button>
@@ -479,7 +507,7 @@ export default function EditSadhakPage() {
           <LoadingButton
             type="submit"
             loading={saving}
-            loadingText="Saving..."
+            loadingText="Compressing & saving..."
           >
             Save
           </LoadingButton>
@@ -489,7 +517,7 @@ export default function EditSadhakPage() {
   );
 }
 
-function Input({ label, value, onChange, placeholder = "" }) {
+function Input({ label, value, onChange, placeholder = "", disabled = false }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-black text-[#172033]">
@@ -498,9 +526,10 @@ function Input({ label, value, onChange, placeholder = "" }) {
 
       <input
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
+        className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56] disabled:opacity-60"
       />
     </div>
   );
@@ -521,6 +550,7 @@ function ProfessionalDropdown({
   onToggle,
   emptyText,
   accentClass,
+  disabled = false,
 }) {
   const wrapperRef = useRef(null);
   const isOpen = openDropdown === dropdownKey;
@@ -551,6 +581,11 @@ function ProfessionalDropdown({
     };
   }, [isOpen, setOpenDropdown]);
 
+  function toggleDropdown() {
+    if (disabled) return;
+    setOpenDropdown(isOpen ? "" : dropdownKey);
+  }
+
   return (
     <div ref={wrapperRef} className="relative">
       <label className="mb-2 block text-sm font-black text-[#172033]">
@@ -559,8 +594,9 @@ function ProfessionalDropdown({
 
       <button
         type="button"
-        onClick={() => setOpenDropdown(isOpen ? "" : dropdownKey)}
-        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left text-sm font-black outline-none transition ${
+        disabled={disabled}
+        onClick={toggleDropdown}
+        className={`flex w-full touch-manipulation items-center justify-between rounded-2xl border px-4 py-4 text-left text-sm font-black outline-none transition disabled:opacity-60 ${
           isOpen
             ? "border-[#102a56] bg-white shadow-[0_10px_26px_rgba(16,42,86,0.10)]"
             : "border-[#d9e0ee] bg-[#f8fafc]"
@@ -587,8 +623,9 @@ function ProfessionalDropdown({
             <button
               key={item.id}
               type="button"
+              disabled={disabled}
               onClick={() => onToggle(item.id)}
-              className={`rounded-full px-4 py-2 text-xs font-black ${accentClass}`}
+              className={`touch-manipulation rounded-full px-4 py-2 text-xs font-black disabled:opacity-60 ${accentClass}`}
             >
               {item.name} ×
             </button>
@@ -620,7 +657,7 @@ function ProfessionalDropdown({
                     key={item.id}
                     type="button"
                     onClick={() => onToggle(item.id)}
-                    className={`mb-2 flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition active:scale-[0.99] ${
+                    className={`mb-2 flex w-full touch-manipulation items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition active:scale-[0.99] ${
                       selected
                         ? "bg-[#102a56] text-white"
                         : "bg-[#f8fafc] text-[#172033] hover:bg-[#eef3fb]"
@@ -640,7 +677,7 @@ function ProfessionalDropdown({
           <button
             type="button"
             onClick={() => setOpenDropdown("")}
-            className="mt-3 w-full rounded-2xl bg-[#eef3fb] px-4 py-3 text-sm font-black text-[#102a56]"
+            className="mt-3 w-full touch-manipulation rounded-2xl bg-[#eef3fb] px-4 py-3 text-sm font-black text-[#102a56]"
           >
             Done
           </button>

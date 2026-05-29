@@ -1,565 +1,813 @@
-"use client";
+import { supabase } from "./supabase";
+import { compressImageFile } from "./imageUtils";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
-import LoadingButton from "@/components/LoadingButton";
-import { getLocalSession } from "@/lib/authService";
-import {
-  createSadhak,
-  getAccessAreas,
-  getSevas,
-} from "@/lib/directoryService";
-import {
-  canAddSadhak,
-  getAllowedSevasForUser,
-} from "@/lib/permissionService";
+export async function getDashboardStats() {
+  const [
+    totalSadhaksResult,
+    activeSadhaksResult,
+    totalSevasResult,
+    totalAccessAreasResult,
+  ] = await Promise.all([
+    supabase.from("sadhaks").select("id", { count: "exact", head: true }),
+    supabase
+      .from("sadhaks")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
+    supabase.from("sevas").select("id", { count: "exact", head: true }),
+    supabase.from("access_areas").select("id", { count: "exact", head: true }),
+  ]);
 
-export default function NewSadhakPage() {
-  const router = useRouter();
-
-  const [currentUser, setCurrentUser] = useState(null);
-  const [sevas, setSevas] = useState([]);
-  const [accessAreas, setAccessAreas] = useState([]);
-
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [address, setAddress] = useState("");
-  const [comment, setComment] = useState("");
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState("");
-
-  const [selectedSevaIds, setSelectedSevaIds] = useState([]);
-  const [selectedAccessAreaIds, setSelectedAccessAreaIds] = useState([]);
-
-  const [sevaSearch, setSevaSearch] = useState("");
-  const [accessSearch, setAccessSearch] = useState("");
-  const [openDropdown, setOpenDropdown] = useState("");
-
-  const [customAccessText, setCustomAccessText] = useState("");
-  const [customAccessAreaNames, setCustomAccessAreaNames] = useState([]);
-
-  const [saving, setSaving] = useState(false);
-
-  const allowedToAdd = canAddSadhak(currentUser);
-
-  const filteredSevas = useMemo(() => {
-    const text = sevaSearch.trim().toLowerCase();
-
-    if (!text) return sevas;
-
-    return sevas.filter((seva) => seva.nameLower.includes(text));
-  }, [sevas, sevaSearch]);
-
-  const filteredAccessAreas = useMemo(() => {
-    const text = accessSearch.trim().toLowerCase();
-
-    if (!text) return accessAreas;
-
-    return accessAreas.filter((area) => area.nameLower.includes(text));
-  }, [accessAreas, accessSearch]);
-
-  const selectedSevas = useMemo(() => {
-    return sevas.filter((seva) => selectedSevaIds.includes(seva.id));
-  }, [sevas, selectedSevaIds]);
-
-  const selectedAccessAreas = useMemo(() => {
-    return accessAreas.filter((area) => selectedAccessAreaIds.includes(area.id));
-  }, [accessAreas, selectedAccessAreaIds]);
-
-  useEffect(() => {
-    const session = getLocalSession();
-    setCurrentUser(session);
-    loadOptions(session);
-  }, []);
-
-  async function loadOptions(session) {
-    try {
-      const [sevaData, accessData] = await Promise.all([
-        getSevas({ searchText: "" }),
-        getAccessAreas({ searchText: "" }),
-      ]);
-
-      const allowedSevas = await getAllowedSevasForUser(session, sevaData);
-
-      setSevas(allowedSevas);
-      setAccessAreas(accessData);
-    } catch (error) {
-      alert(error.message);
-    }
-  }
-
-  function handlePhotoChange(e) {
-    const file = e.target.files?.[0];
-
-    if (!file) return;
-
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-  }
-
-  function toggleSeva(sevaId) {
-    setSelectedSevaIds((prev) => {
-      if (prev.includes(sevaId)) {
-        return prev.filter((id) => id !== sevaId);
-      }
-
-      return [...prev, sevaId];
-    });
-  }
-
-  function toggleAccessArea(accessAreaId) {
-    setSelectedAccessAreaIds((prev) => {
-      if (prev.includes(accessAreaId)) {
-        return prev.filter((id) => id !== accessAreaId);
-      }
-
-      return [...prev, accessAreaId];
-    });
-  }
-
-  function addCustomAccessArea() {
-    const cleanText = customAccessText.trim();
-
-    if (!cleanText) {
-      alert("Please write access area name");
-      return;
-    }
-
-    const alreadyExists = customAccessAreaNames.some(
-      (item) => item.toLowerCase() === cleanText.toLowerCase()
+  if (totalSadhaksResult.error) {
+    throw new Error(
+      "Unable to load sadhak count: " + totalSadhaksResult.error.message
     );
-
-    if (!alreadyExists) {
-      setCustomAccessAreaNames((prev) => [...prev, cleanText]);
-    }
-
-    setCustomAccessText("");
   }
 
-  function removeCustomAccessArea(name) {
-    setCustomAccessAreaNames((prev) => prev.filter((item) => item !== name));
+  if (activeSadhaksResult.error) {
+    throw new Error(
+      "Unable to load active sadhak count: " +
+        activeSadhaksResult.error.message
+    );
   }
 
-  function isValidMobile(value) {
-    const clean = value.trim();
-
-    if (clean === "00") return true;
-
-    return /^[0-9]{10}$/.test(clean);
+  if (totalSevasResult.error) {
+    throw new Error(
+      "Unable to load seva count: " + totalSevasResult.error.message
+    );
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  if (totalAccessAreasResult.error) {
+    throw new Error(
+      "Unable to load access count: " + totalAccessAreasResult.error.message
+    );
+  }
 
-    if (!allowedToAdd) {
-      alert("You do not have permission to add sadhak");
-      return;
+  return {
+    totalSadhaks: totalSadhaksResult.count || 0,
+    activeSadhaks: activeSadhaksResult.count || 0,
+    totalSevas: totalSevasResult.count || 0,
+    totalAccessAreas: totalAccessAreasResult.count || 0,
+  };
+}
+
+/* -------------------- SEVAS -------------------- */
+
+export async function getSevas({ searchText = "", activeOnly = false } = {}) {
+  let query = supabase.from("sevas").select("*").order("name");
+
+  if (activeOnly) {
+    query = query.eq("active", true);
+  }
+
+  if (searchText?.trim()) {
+    query = query.ilike("name", `%${searchText.trim()}%`);
+  }
+
+  const { data, error } = await query.limit(500);
+
+  if (error) {
+    throw new Error("Unable to load sevas: " + error.message);
+  }
+
+  return (data || []).map(mapSeva);
+}
+
+export async function createSeva({ name, description = "" }) {
+  if (!name?.trim()) {
+    throw new Error("Seva name is required");
+  }
+
+  const { data, error } = await supabase
+    .from("sevas")
+    .insert({
+      name: name.trim(),
+      description: description?.trim() || "",
+      active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Seva creation failed: " + error.message);
+  }
+
+  return mapSeva(data);
+}
+
+export async function updateSeva({
+  sevaId,
+  name,
+  description = "",
+  active = true,
+}) {
+  if (!sevaId) {
+    throw new Error("Seva ID missing");
+  }
+
+  if (!name?.trim()) {
+    throw new Error("Seva name is required");
+  }
+
+  const { data, error } = await supabase
+    .from("sevas")
+    .update({
+      name: name.trim(),
+      description: description?.trim() || "",
+      active: Boolean(active),
+    })
+    .eq("id", sevaId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Seva update failed: " + error.message);
+  }
+
+  return mapSeva(data);
+}
+
+export async function deleteSeva(sevaId) {
+  if (!sevaId) {
+    throw new Error("Seva ID missing");
+  }
+
+  const { error } = await supabase.from("sevas").delete().eq("id", sevaId);
+
+  if (error) {
+    throw new Error("Seva delete failed: " + error.message);
+  }
+
+  return true;
+}
+
+/* -------------------- ACCESS AREAS -------------------- */
+
+export async function getAccessAreas({
+  searchText = "",
+  activeOnly = false,
+} = {}) {
+  let query = supabase.from("access_areas").select("*").order("name");
+
+  if (activeOnly) {
+    query = query.eq("active", true);
+  }
+
+  if (searchText?.trim()) {
+    query = query.ilike("name", `%${searchText.trim()}%`);
+  }
+
+  const { data, error } = await query.limit(500);
+
+  if (error) {
+    throw new Error("Unable to load access areas: " + error.message);
+  }
+
+  return (data || []).map(mapAccessArea);
+}
+
+export async function createAccessArea({ name, description = "" }) {
+  if (!name?.trim()) {
+    throw new Error("Access area name is required");
+  }
+
+  const { data, error } = await supabase
+    .from("access_areas")
+    .insert({
+      name: name.trim(),
+      description: description?.trim() || "",
+      active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Access area creation failed: " + error.message);
+  }
+
+  return mapAccessArea(data);
+}
+
+export async function updateAccessArea({
+  accessAreaId,
+  name,
+  description = "",
+  active = true,
+}) {
+  if (!accessAreaId) {
+    throw new Error("Access area ID missing");
+  }
+
+  if (!name?.trim()) {
+    throw new Error("Access area name is required");
+  }
+
+  const { data, error } = await supabase
+    .from("access_areas")
+    .update({
+      name: name.trim(),
+      description: description?.trim() || "",
+      active: Boolean(active),
+    })
+    .eq("id", accessAreaId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Access area update failed: " + error.message);
+  }
+
+  return mapAccessArea(data);
+}
+
+export async function deleteAccessArea(accessAreaId) {
+  if (!accessAreaId) {
+    throw new Error("Access area ID missing");
+  }
+
+  const { error } = await supabase
+    .from("access_areas")
+    .delete()
+    .eq("id", accessAreaId);
+
+  if (error) {
+    throw new Error("Access area delete failed: " + error.message);
+  }
+
+  return true;
+}
+
+/* -------------------- SADHAKS -------------------- */
+
+async function createSadhakCode() {
+  const { data, error } = await supabase.rpc("get_next_sadhak_code");
+
+  if (error) {
+    throw new Error(
+      "Unable to generate Sadhak ID. Please run get_next_sadhak_code SQL function in Supabase. " +
+        error.message
+    );
+  }
+
+  return data;
+}
+
+export async function getSadhaks({
+  searchText = "",
+  sevaId = "",
+  activeOnly = false,
+  limit = 100,
+} = {}) {
+  let sadhakIdsFromSeva = null;
+
+  if (sevaId) {
+    const { data: sevaRows, error: sevaError } = await supabase
+      .from("sadhak_sevas")
+      .select("sadhak_id")
+      .eq("seva_id", sevaId);
+
+    if (sevaError) {
+      throw new Error("Unable to filter by seva: " + sevaError.message);
     }
 
-    if (!photoFile) {
-      alert("Please upload sadhak photo");
-      return;
+    sadhakIdsFromSeva = (sevaRows || []).map((item) => item.sadhak_id);
+
+    if (sadhakIdsFromSeva.length === 0) {
+      return [];
     }
+  }
 
-    if (!name.trim()) {
-      alert("Please enter sadhak name");
-      return;
-    }
+  let query = supabase
+    .from("sadhaks")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    if (!mobile.trim()) {
-      alert("Please enter mobile number. Use 00 only if not available.");
-      return;
-    }
+  if (activeOnly) {
+    query = query.eq("active", true);
+  }
 
-    if (!isValidMobile(mobile)) {
-      alert("Mobile number must be 10 digits, or use 00 if not available.");
-      return;
-    }
+  if (sadhakIdsFromSeva) {
+    query = query.in("id", sadhakIdsFromSeva);
+  }
 
-    if (!address.trim()) {
-      alert("Please enter address");
-      return;
-    }
+  const text = searchText?.trim();
 
-    if (selectedSevaIds.length === 0) {
-      alert("Please select at least one seva");
-      return;
-    }
+  if (text) {
+    query = query.or(
+      `name.ilike.%${text}%,mobile.ilike.%${text}%,sadhak_code.ilike.%${text}%`
+    );
+  }
 
-    setSaving(true);
+  const { data, error } = await query.limit(limit);
 
-    try {
-      await createSadhak({
-        name,
-        mobile,
-        address,
-        comment,
-        photoFile,
-        sevaIds: selectedSevaIds,
-        accessAreaIds: selectedAccessAreaIds,
-        customAccessAreaNames,
-        createdBy: currentUser,
+  if (error) {
+    throw new Error("Unable to load sadhaks: " + error.message);
+  }
+
+  return (data || []).map(mapSadhak);
+}
+
+export async function createSadhak({
+  name,
+  mobile,
+  address,
+  comment = "",
+  photoFile,
+  sevaIds = [],
+  accessAreaIds = [],
+  customAccessAreaNames = [],
+  createdBy,
+}) {
+  validateSadhakPayload({
+    name,
+    mobile,
+    address,
+    photoRequired: true,
+    photoFile,
+    sevaIds,
+  });
+
+  const sadhakCode = await createSadhakCode();
+  const qrToken =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const { data: insertedSadhak, error: insertError } = await supabase
+    .from("sadhaks")
+    .insert({
+      sadhak_code: sadhakCode,
+      name: name.trim(),
+      mobile: mobile.trim(),
+      address: address.trim(),
+      notes: comment?.trim() || "",
+      photo_url: "",
+      photo_path: "",
+      qr_token: qrToken,
+      active: true,
+      created_by: createdBy?.loginId || "",
+      updated_by: createdBy?.loginId || "",
+    })
+    .select("*")
+    .single();
+
+  if (insertError) {
+    throw new Error("Sadhak creation failed: " + insertError.message);
+  }
+
+  try {
+    const compressedPhoto = await compressImageFile(photoFile, {
+      maxWidth: 900,
+      maxHeight: 900,
+      quality: 0.72,
+      maxSizeKB: 500,
+    });
+
+    const photoPath = `${insertedSadhak.id}/${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("sadhak-photos")
+      .upload(photoPath, compressedPhoto, {
+        contentType: "image/jpeg",
+        upsert: true,
       });
 
-      alert("Sadhak added successfully");
-      router.replace("/sadhaks");
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setSaving(false);
+    if (uploadError) {
+      throw new Error("Photo upload failed: " + uploadError.message);
     }
+
+    const { data: publicPhotoData } = supabase.storage
+      .from("sadhak-photos")
+      .getPublicUrl(photoPath);
+
+    const photoUrl = publicPhotoData?.publicUrl || "";
+
+    const { error: photoUpdateError } = await supabase
+      .from("sadhaks")
+      .update({
+        photo_url: photoUrl,
+        photo_path: photoPath,
+      })
+      .eq("id", insertedSadhak.id);
+
+    if (photoUpdateError) {
+      throw new Error("Photo save failed: " + photoUpdateError.message);
+    }
+
+    await saveSadhakSevas(insertedSadhak.id, sevaIds);
+    await saveSadhakAccessAreas({
+      sadhakId: insertedSadhak.id,
+      accessAreaIds,
+      customAccessAreaNames,
+    });
+
+    return getSadhakProfileById(insertedSadhak.id);
+  } catch (error) {
+    await supabase.from("sadhak_sevas").delete().eq("sadhak_id", insertedSadhak.id);
+    await supabase.from("sadhak_access").delete().eq("sadhak_id", insertedSadhak.id);
+
+    if (insertedSadhak.photo_path) {
+      await supabase.storage
+        .from("sadhak-photos")
+        .remove([insertedSadhak.photo_path]);
+    }
+
+    await supabase.from("sadhaks").delete().eq("id", insertedSadhak.id);
+
+    throw error;
   }
-
-  if (!allowedToAdd) {
-    return (
-      <AppShell title="Add Sadhak" subtitle="Restricted Access">
-        <div className="rounded-[28px] border border-[#d9e0ee] bg-white p-5 text-sm font-black text-red-700">
-          You do not have permission to add sadhak.
-        </div>
-      </AppShell>
-    );
-  }
-
-  return (
-    <AppShell title="Add Sadhak" subtitle="New Profile">
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-4 rounded-[30px] border border-[#d9e0ee] bg-white p-5 shadow-[0_14px_36px_rgba(16,42,86,0.08)]"
-      >
-        <h2 className="text-2xl font-black text-[#172033]">
-          Sadhak Details
-        </h2>
-
-        <div>
-          <label className="mb-2 block text-sm font-black text-[#172033]">
-            Photo <span className="text-red-600">*</span>
-          </label>
-
-          <label className="block cursor-pointer rounded-[28px] border-2 border-dashed border-[#c9d5e8] bg-[#f8fafc] p-4 text-center transition hover:border-[#102a56] hover:bg-[#eef3fb]">
-            {photoPreview ? (
-              <div className="overflow-hidden rounded-[24px] bg-white">
-                <img
-                  src={photoPreview}
-                  alt="Preview"
-                  className="h-72 w-full object-cover"
-                />
-
-                <div className="p-3 text-sm font-black text-[#102a56]">
-                  Tap to change photo
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#102a56] text-2xl font-black text-white">
-                  +
-                </div>
-
-                <p className="mt-4 text-base font-black text-[#172033]">
-                  Upload Sadhak Photo
-                </p>
-
-                <p className="mt-1 text-xs font-bold text-[#697386]">
-                  Photo is compulsory for ID verification
-                </p>
-              </div>
-            )}
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoChange}
-              className="hidden"
-            />
-          </label>
-        </div>
-
-        <Input label="Name *" value={name} onChange={setName} />
-
-        <Input
-          label="Mobile *"
-          value={mobile}
-          onChange={setMobile}
-          placeholder="10 digit mobile or 00"
-        />
-
-        <div>
-          <label className="mb-2 block text-sm font-black text-[#172033]">
-            Address <span className="text-red-600">*</span>
-          </label>
-
-          <textarea
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            rows={3}
-            placeholder="Enter full address"
-            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
-          />
-        </div>
-
-        <ProfessionalDropdown
-          dropdownKey="seva"
-          title="Seva *"
-          placeholder={
-            sevas.length === 0
-              ? "No seva assigned to you"
-              : "Select seva"
-          }
-          openDropdown={openDropdown}
-          setOpenDropdown={setOpenDropdown}
-          searchValue={sevaSearch}
-          setSearchValue={setSevaSearch}
-          searchPlaceholder="Search seva"
-          items={filteredSevas}
-          selectedItems={selectedSevas}
-          selectedIds={selectedSevaIds}
-          onToggle={toggleSeva}
-          emptyText="No seva found"
-          accentClass="bg-[#102a56] text-white"
-        />
-
-        <ProfessionalDropdown
-          dropdownKey="access"
-          title="Access Allowed Optional"
-          placeholder="Select access area"
-          openDropdown={openDropdown}
-          setOpenDropdown={setOpenDropdown}
-          searchValue={accessSearch}
-          setSearchValue={setAccessSearch}
-          searchPlaceholder="Search access area"
-          items={filteredAccessAreas}
-          selectedItems={selectedAccessAreas}
-          selectedIds={selectedAccessAreaIds}
-          onToggle={toggleAccessArea}
-          emptyText="No access area found"
-          accentClass="bg-green-700 text-white"
-        />
-
-        <div className="rounded-[26px] border border-[#d9e0ee] bg-[#f8fafc] p-4">
-          <label className="mb-2 block text-sm font-black text-[#172033]">
-            Add Other Access Optional
-          </label>
-
-          <div className="flex gap-2">
-            <input
-              value={customAccessText}
-              onChange={(e) => setCustomAccessText(e.target.value)}
-              placeholder="Example: Store Room"
-              className="min-w-0 flex-1 rounded-2xl border border-[#d9e0ee] bg-white px-4 py-3 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
-            />
-
-            <button
-              type="button"
-              onClick={addCustomAccessArea}
-              className="rounded-2xl bg-[#102a56] px-4 py-3 text-sm font-black text-white"
-            >
-              Add
-            </button>
-          </div>
-
-          {customAccessAreaNames.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {customAccessAreaNames.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => removeCustomAccessArea(item)}
-                  className="rounded-full bg-[#102a56] px-4 py-2 text-xs font-black text-white"
-                >
-                  {item} ×
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-black text-[#172033]">
-            Comment Optional
-          </label>
-
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            rows={3}
-            placeholder="Any important note"
-            className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-semibold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
-          />
-        </div>
-
-        <LoadingButton
-          type="submit"
-          loading={saving}
-          loadingText="Saving sadhak..."
-        >
-          Save Sadhak
-        </LoadingButton>
-      </form>
-    </AppShell>
-  );
 }
 
-function Input({ label, value, onChange, placeholder = "" }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-black text-[#172033]">
-        {label}
-      </label>
-
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-4 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
-      />
-    </div>
-  );
-}
-
-function ProfessionalDropdown({
-  dropdownKey,
-  title,
-  placeholder,
-  openDropdown,
-  setOpenDropdown,
-  searchValue,
-  setSearchValue,
-  searchPlaceholder,
-  items,
-  selectedItems,
-  selectedIds,
-  onToggle,
-  emptyText,
-  accentClass,
+export async function updateSadhak({
+  sadhakId,
+  name,
+  mobile,
+  address,
+  comment = "",
+  photoFile = null,
+  sevaIds = [],
+  accessAreaIds = [],
+  customAccessAreaNames = [],
+  active = true,
+  updatedBy,
 }) {
-  const wrapperRef = useRef(null);
-  const isOpen = openDropdown === dropdownKey;
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (!isOpen) return;
-
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setOpenDropdown("");
-      }
-    }
-
-    function handleEsc(event) {
-      if (event.key === "Escape") {
-        setOpenDropdown("");
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside);
-    document.addEventListener("keydown", handleEsc);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [isOpen, setOpenDropdown]);
-
-  function toggleDropdown() {
-    setOpenDropdown(isOpen ? "" : dropdownKey);
+  if (!sadhakId) {
+    throw new Error("Sadhak ID missing");
   }
 
-  return (
-    <div ref={wrapperRef} className="relative">
-      <label className="mb-2 block text-sm font-black text-[#172033]">
-        {title}
-      </label>
+  validateSadhakPayload({
+    name,
+    mobile,
+    address,
+    photoRequired: false,
+    photoFile,
+    sevaIds,
+  });
 
-      <button
-        type="button"
-        onClick={toggleDropdown}
-        className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left text-sm font-black outline-none transition ${
-          isOpen
-            ? "border-[#102a56] bg-white shadow-[0_10px_26px_rgba(16,42,86,0.10)]"
-            : "border-[#d9e0ee] bg-[#f8fafc]"
-        }`}
-      >
-        <span
-          className={
-            selectedItems.length > 0 ? "text-[#172033]" : "text-[#697386]"
-          }
-        >
-          {selectedItems.length > 0
-            ? `${selectedItems.length} selected`
-            : placeholder}
-        </span>
+  const updateData = {
+    name: name.trim(),
+    mobile: mobile.trim(),
+    address: address.trim(),
+    notes: comment?.trim() || "",
+    active: Boolean(active),
+    updated_by: updatedBy?.loginId || "",
+    updated_at: new Date().toISOString(),
+  };
 
-        <span className="rounded-full bg-[#eef3fb] px-2 py-1 text-xs text-[#102a56]">
-          {isOpen ? "▲" : "▼"}
-        </span>
-      </button>
+  if (photoFile) {
+    const compressedPhoto = await compressImageFile(photoFile, {
+      maxWidth: 900,
+      maxHeight: 900,
+      quality: 0.72,
+      maxSizeKB: 500,
+    });
 
-      {selectedItems.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {selectedItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onToggle(item.id)}
-              className={`rounded-full px-4 py-2 text-xs font-black ${accentClass}`}
-            >
-              {item.name} ×
-            </button>
-          ))}
-        </div>
-      )}
+    const newPhotoPath = `${sadhakId}/${Date.now()}.jpg`;
 
-      {isOpen && (
-        <div className="absolute left-0 right-0 z-50 mt-2 rounded-[24px] border border-[#d9e0ee] bg-white p-3 shadow-[0_24px_60px_rgba(16,42,86,0.18)]">
-          <input
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder={searchPlaceholder}
-            autoFocus
-            className="mb-3 w-full rounded-2xl border border-[#d9e0ee] bg-[#f8fafc] px-4 py-3 text-sm font-bold text-[#172033] outline-none placeholder:text-[#697386] focus:border-[#102a56]"
-          />
+    const { error: uploadError } = await supabase.storage
+      .from("sadhak-photos")
+      .upload(newPhotoPath, compressedPhoto, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
 
-          <div className="max-h-80 overflow-y-auto pr-1">
-            {items.length === 0 ? (
-              <p className="rounded-2xl bg-[#f8fafc] p-4 text-sm font-bold text-[#697386]">
-                {emptyText}
-              </p>
-            ) : (
-              items.map((item) => {
-                const selected = selectedIds.includes(item.id);
+    if (uploadError) {
+      throw new Error("Photo upload failed: " + uploadError.message);
+    }
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onToggle(item.id)}
-                    className={`mb-2 flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition active:scale-[0.99] ${
-                      selected
-                        ? "bg-[#102a56] text-white"
-                        : "bg-[#f8fafc] text-[#172033] hover:bg-[#eef3fb]"
-                    }`}
-                  >
-                    <span className="pr-3 leading-5">{item.name}</span>
+    const { data: publicPhotoData } = supabase.storage
+      .from("sadhak-photos")
+      .getPublicUrl(newPhotoPath);
 
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs text-[#102a56]">
-                      {selected ? "✓" : "+"}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+    updateData.photo_url = publicPhotoData?.publicUrl || "";
+    updateData.photo_path = newPhotoPath;
+  }
 
-          <button
-            type="button"
-            onClick={() => setOpenDropdown("")}
-            className="mt-3 w-full rounded-2xl bg-[#eef3fb] px-4 py-3 text-sm font-black text-[#102a56]"
-          >
-            Done
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  const { error: updateError } = await supabase
+    .from("sadhaks")
+    .update(updateData)
+    .eq("id", sadhakId);
+
+  if (updateError) {
+    throw new Error("Sadhak update failed: " + updateError.message);
+  }
+
+  await saveSadhakSevas(sadhakId, sevaIds);
+  await saveSadhakAccessAreas({
+    sadhakId,
+    accessAreaIds,
+    customAccessAreaNames,
+  });
+
+  return getSadhakProfileById(sadhakId);
+}
+
+export async function deleteSadhak(sadhak) {
+  const sadhakId = typeof sadhak === "string" ? sadhak : sadhak?.id;
+
+  if (!sadhakId) {
+    throw new Error("Sadhak ID missing");
+  }
+
+  const photoPath = typeof sadhak === "object" ? sadhak?.photoPath : "";
+
+  await supabase.from("sadhak_sevas").delete().eq("sadhak_id", sadhakId);
+  await supabase.from("sadhak_access").delete().eq("sadhak_id", sadhakId);
+
+  if (photoPath) {
+    await supabase.storage.from("sadhak-photos").remove([photoPath]);
+  }
+
+  const { error } = await supabase.from("sadhaks").delete().eq("id", sadhakId);
+
+  if (error) {
+    throw new Error("Sadhak delete failed: " + error.message);
+  }
+
+  return true;
+}
+
+export async function getSadhakProfileById(sadhakId) {
+  if (!sadhakId) {
+    throw new Error("Sadhak ID missing");
+  }
+
+  const { data, error } = await supabase
+    .from("sadhaks")
+    .select(
+      `
+      *,
+      sadhak_sevas (
+        seva_id,
+        sevas (
+          id,
+          name,
+          description,
+          active
+        )
+      ),
+      sadhak_access (
+        access_area_id,
+        access_areas (
+          id,
+          name,
+          description,
+          active
+        )
+      )
+    `
+    )
+    .eq("id", sadhakId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Unable to load sadhak profile: " + error.message);
+  }
+
+  if (!data) return null;
+
+  return mapSadhakProfile(data);
+}
+
+export async function getSadhakProfileByQrToken(qrToken) {
+  if (!qrToken) {
+    throw new Error("QR token missing");
+  }
+
+  const { data, error } = await supabase
+    .from("sadhaks")
+    .select(
+      `
+      *,
+      sadhak_sevas (
+        seva_id,
+        sevas (
+          id,
+          name,
+          description,
+          active
+        )
+      ),
+      sadhak_access (
+        access_area_id,
+        access_areas (
+          id,
+          name,
+          description,
+          active
+        )
+      )
+    `
+    )
+    .eq("qr_token", qrToken)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Unable to verify QR profile: " + error.message);
+  }
+
+  if (!data) return null;
+
+  return mapSadhakProfile(data);
+}
+
+/* -------------------- RELATION HELPERS -------------------- */
+
+async function saveSadhakSevas(sadhakId, sevaIds = []) {
+  await supabase.from("sadhak_sevas").delete().eq("sadhak_id", sadhakId);
+
+  const uniqueSevaIds = [...new Set(sevaIds)].filter(Boolean);
+
+  if (uniqueSevaIds.length === 0) return true;
+
+  const rows = uniqueSevaIds.map((sevaId) => ({
+    sadhak_id: sadhakId,
+    seva_id: sevaId,
+  }));
+
+  const { error } = await supabase.from("sadhak_sevas").insert(rows);
+
+  if (error) {
+    throw new Error("Sadhak seva save failed: " + error.message);
+  }
+
+  return true;
+}
+
+async function saveSadhakAccessAreas({
+  sadhakId,
+  accessAreaIds = [],
+  customAccessAreaNames = [],
+}) {
+  await supabase.from("sadhak_access").delete().eq("sadhak_id", sadhakId);
+
+  const finalAccessAreaIds = [...new Set(accessAreaIds)].filter(Boolean);
+
+  for (const customName of customAccessAreaNames || []) {
+    const cleanName = customName?.trim();
+
+    if (!cleanName) continue;
+
+    const accessArea = await findOrCreateAccessArea(cleanName);
+    finalAccessAreaIds.push(accessArea.id);
+  }
+
+  const uniqueAccessAreaIds = [...new Set(finalAccessAreaIds)].filter(Boolean);
+
+  if (uniqueAccessAreaIds.length === 0) return true;
+
+  const rows = uniqueAccessAreaIds.map((accessAreaId) => ({
+    sadhak_id: sadhakId,
+    access_area_id: accessAreaId,
+  }));
+
+  const { error } = await supabase.from("sadhak_access").insert(rows);
+
+  if (error) {
+    throw new Error("Sadhak access save failed: " + error.message);
+  }
+
+  return true;
+}
+
+async function findOrCreateAccessArea(name) {
+  const { data: existing, error: existingError } = await supabase
+    .from("access_areas")
+    .select("*")
+    .ilike("name", name)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error("Access area check failed: " + existingError.message);
+  }
+
+  if (existing) {
+    return mapAccessArea(existing);
+  }
+
+  const { data, error } = await supabase
+    .from("access_areas")
+    .insert({
+      name,
+      description: "Custom access area",
+      active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error("Custom access area creation failed: " + error.message);
+  }
+
+  return mapAccessArea(data);
+}
+
+/* -------------------- VALIDATION -------------------- */
+
+function validateSadhakPayload({
+  name,
+  mobile,
+  address,
+  photoRequired,
+  photoFile,
+  sevaIds,
+}) {
+  if (photoRequired && !photoFile) {
+    throw new Error("Please upload sadhak photo");
+  }
+
+  if (!name?.trim()) {
+    throw new Error("Sadhak name is required");
+  }
+
+  if (!mobile?.trim()) {
+    throw new Error("Mobile number is required. Use 00 if not available.");
+  }
+
+  if (!isValidMobile(mobile)) {
+    throw new Error("Mobile number must be 10 digits, or use 00 if not available.");
+  }
+
+  if (!address?.trim()) {
+    throw new Error("Address is required");
+  }
+
+  if (!Array.isArray(sevaIds) || sevaIds.length === 0) {
+    throw new Error("Please select at least one seva");
+  }
+}
+
+function isValidMobile(value) {
+  const clean = value.trim();
+
+  if (clean === "00") return true;
+
+  return /^[0-9]{10}$/.test(clean);
+}
+
+/* -------------------- MAPPERS -------------------- */
+
+function mapSeva(item) {
+  return {
+    id: item.id,
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
+    description: item.description || "",
+    active: item.active,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+function mapAccessArea(item) {
+  return {
+    id: item.id,
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
+    description: item.description || "",
+    active: item.active,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+function mapSadhak(item) {
+  return {
+    id: item.id,
+    sadhakCode: item.sadhak_code || "",
+    name: item.name || "",
+    nameLower: (item.name || "").toLowerCase(),
+    mobile: item.mobile || "",
+    address: item.address || "",
+    notes: item.notes || "",
+    photoUrl: item.photo_url || "",
+    photoPath: item.photo_path || "",
+    qrToken: item.qr_token || "",
+    active: item.active,
+    createdBy: item.created_by || "",
+    updatedBy: item.updated_by || "",
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+function mapSadhakProfile(item) {
+  const base = mapSadhak(item);
+
+  const sevas = (item.sadhak_sevas || [])
+    .map((row) => row.sevas)
+    .filter(Boolean)
+    .map(mapSeva);
+
+  const accessAreas = (item.sadhak_access || [])
+    .map((row) => row.access_areas)
+    .filter(Boolean)
+    .map(mapAccessArea);
+
+  return {
+    ...base,
+    sevas,
+    accessAreas,
+    createdByName: item.created_by || "",
+    updatedByName: item.updated_by || "",
+  };
 }
