@@ -1,12 +1,13 @@
-const CACHE_NAME = "sadhak-directory-v1";
+const CACHE_NAME = "sadhak-directory-v2";
 
 const STATIC_ASSETS = [
   "/",
   "/login",
   "/manifest.json",
-  "/token.jpg",
+  "/app-icon.jpg",
   "/icon-192.png",
   "/icon-512.png",
+  "/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
